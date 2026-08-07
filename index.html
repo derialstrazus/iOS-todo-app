@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Todo">
+<meta name="theme-color" content="#0f1115">
+<title>Todo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg: #0f1115;
+    --surface: #1a1d24;
+    --surface-2: #22262f;
+    --text: #e8eaed;
+    --muted: #8a909c;
+    --accent: #4f9cf9;
+    --danger: #f96d5f;
+    --green: #57c98a;
+  }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    height: 100%;
+    overscroll-behavior: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header { padding: 20px 20px 12px; }
+  h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .input-row { display: flex; gap: 10px; padding: 8px 20px 12px; }
+  #task-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--surface-2);
+    border-radius: 12px;
+    padding: 14px 16px;
+    color: var(--text);
+    font-size: 16px;
+    outline: none;
+  }
+  #task-input:focus { border-color: var(--accent); }
+  #add-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: 12px;
+    width: 52px;
+    color: #fff;
+    font-size: 26px;
+    font-weight: 300;
+    flex-shrink: 0;
+  }
+  #add-btn:active { opacity: 0.7; }
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 0 20px 12px;
+  }
+  .tool {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--surface-2);
+    border-radius: 10px;
+    padding: 11px 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .tool:active { background: var(--surface-2); }
+  ul { list-style: none; flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+  li {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 10px;
+  }
+  .check {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--muted);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  li.done .check { background: var(--accent); border-color: var(--accent); }
+  li.done .check::after { content: "\2713"; color: #fff; font-size: 14px; }
+  .label { flex: 1; font-size: 16px; word-break: break-word; }
+  li.done .label { color: var(--muted); text-decoration: line-through; }
+  .del {
+    color: var(--danger);
+    background: none; border: none;
+    font-size: 20px; padding: 4px 8px; opacity: 0.6;
+  }
+  .del:active { opacity: 1; }
+  .empty { text-align: center; color: var(--muted); margin-top: 60px; font-size: 15px; }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface-2);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.25s;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+    max-width: 80%;
+    text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #file-input { display: none; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Todo</h1>
+    <div class="sub" id="count"></div>
+  </header>
+  <div class="input-row">
+    <input id="task-input" type="text" placeholder="Add a task\u2026" autocomplete="off" enterkeyhint="done">
+    <button id="add-btn" aria-label="Add">+</button>
+  </div>
+  <div class="toolbar">
+    <button class="tool" id="export-btn">Export</button>
+    <button class="tool" id="import-btn">Import</button>
+    <button class="tool" id="clear-done-btn">Clear done</button>
+  </div>
+  <input type="file" id="file-input" accept=".md,.markdown,.txt,text/markdown,text/plain">
+  <ul id="list"></ul>
+  <div class="toast" id="toast"></div>
+
+<script>
+  const KEY = "todos.v1";
+  const FILENAME = "Todos.md";
+  const list = document.getElementById("list");
+  const input = document.getElementById("task-input");
+  const addBtn = document.getElementById("add-btn");
+  const count = document.getElementById("count");
+  const toast = document.getElementById("toast");
+  const fileInput = document.getElementById("file-input");
+
+  let todos = load();
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || []; }
+    catch { return []; }
+  }
+  function save() { localStorage.setItem(KEY, JSON.stringify(todos)); }
+
+  let toastTimer;
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 2200);
+  }
+
+  function render() {
+    list.innerHTML = "";
+    if (todos.length === 0) {
+      const p = document.createElement("div");
+      p.className = "empty";
+      p.textContent = "No tasks yet. Add one above.";
+      list.appendChild(p);
+    } else {
+      todos.forEach(function (t, i) {
+        const li = document.createElement("li");
+        if (t.done) li.className = "done";
+
+        const check = document.createElement("div");
+        check.className = "check";
+        check.onclick = function () { todos[i].done = !todos[i].done; save(); render(); };
+
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = t.text;
+
+        const del = document.createElement("button");
+        del.className = "del";
+        del.textContent = "\u2715";
+        del.onclick = function () { todos.splice(i, 1); save(); render(); };
+
+        li.append(check, label, del);
+        list.appendChild(li);
+      });
+    }
+    const active = todos.filter(function (t) { return !t.done; }).length;
+    count.textContent = todos.length ? active + " active \u00b7 " + todos.length + " total" : "";
+  }
+
+  function add() {
+    const text = input.value.trim();
+    if (!text) return;
+    todos.unshift({ text: text, done: false });
+    input.value = "";
+    save();
+    render();
+  }
+
+  // ---- Obsidian-compatible Markdown round-trip ----
+
+  function toMarkdown() {
+    const lines = [
+      "# Todos",
+      "",
+      "*Exported " + new Date().toLocaleString() + "*",
+      ""
+    ];
+    todos.forEach(function (t) {
+      lines.push("- [" + (t.done ? "x" : " ") + "] " + t.text);
+    });
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  // Parse any Markdown: pick up every task-list line, ignore the rest.
+  // Matches "- [ ] text", "- [x] text", "* [X] text", "+ [ ] text",
+  // with optional leading whitespace (nested tasks).
+  function fromMarkdown(text) {
+    const re = /^\s*[-*+]\s+\[( |x|X)\]\s+(.*\S)\s*$/;
+    const parsed = [];
+    text.split(/\r?\n/).forEach(function (line) {
+      const m = line.match(re);
+      if (m) parsed.push({ text: m[2], done: m[1].toLowerCase() === "x" });
+    });
+    return parsed;
+  }
+
+  function exportMd() {
+    const md = toMarkdown();
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = FILENAME;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    showToast("Exported " + FILENAME + " \u2014 save it to your vault");
+  }
+
+  function importMd() { fileInput.click(); }
+
+  fileInput.addEventListener("change", function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+      const parsed = fromMarkdown(reader.result);
+      if (parsed.length === 0) {
+        showToast("No tasks found in that file");
+      } else {
+        todos = parsed;
+        save();
+        render();
+        showToast("Imported " + parsed.length + " task" + (parsed.length === 1 ? "" : "s"));
+      }
+      fileInput.value = "";
+    };
+    reader.readAsText(file);
+  });
+
+  function clearDone() {
+    const before = todos.length;
+    todos = todos.filter(function (t) { return !t.done; });
+    save();
+    render();
+    const removed = before - todos.length;
+    showToast(removed ? "Cleared " + removed + " completed" : "Nothing to clear");
+  }
+
+  addBtn.onclick = add;
+  input.addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
+  document.getElementById("export-btn").onclick = exportMd;
+  document.getElementById("import-btn").onclick = importMd;
+  document.getElementById("clear-done-btn").onclick = clearDone;
+
+  render();
+</script>
+</body>
+</html>

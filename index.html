@@ -21,7 +21,6 @@
     --muted: #8a909c;
     --accent: #4f9cf9;
     --danger: #f96d5f;
-    --green: #57c98a;
   }
   html, body {
     background: var(--bg);
@@ -34,11 +33,48 @@
     display: flex;
     flex-direction: column;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    height: 100%;
   }
-  header { padding: 20px 20px 12px; }
-  h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
-  .sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
-  .input-row { display: flex; gap: 10px; padding: 8px 20px 12px; }
+  header { padding: 18px 20px 8px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+
+  /* Category tabs */
+  .cats {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 20px 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .cats::-webkit-scrollbar { display: none; }
+  .cat {
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1px solid var(--surface-2);
+    color: var(--muted);
+    border-radius: 20px;
+    padding: 8px 15px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .cat.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .cat .badge {
+    font-size: 12px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 1px 7px;
+    min-width: 18px;
+    text-align: center;
+  }
+  .cat.active .badge { background: rgba(255,255,255,0.25); }
+  .cat.addcat { color: var(--accent); font-weight: 600; padding: 8px 14px; }
+
+  .input-row { display: flex; gap: 10px; padding: 10px 20px 10px; }
   #task-input {
     flex: 1;
     background: var(--surface);
@@ -52,20 +88,13 @@
   #task-input:focus { border-color: var(--accent); }
   #add-btn {
     background: var(--accent);
-    border: none;
-    border-radius: 12px;
-    width: 52px;
-    color: #fff;
-    font-size: 26px;
-    font-weight: 300;
-    flex-shrink: 0;
+    border: none; border-radius: 12px;
+    width: 52px; color: #fff;
+    font-size: 26px; font-weight: 300; flex-shrink: 0;
   }
   #add-btn:active { opacity: 0.7; }
-  .toolbar {
-    display: flex;
-    gap: 8px;
-    padding: 0 20px 12px;
-  }
+
+  .toolbar { display: flex; gap: 8px; padding: 0 20px 10px; }
   .tool {
     flex: 1;
     background: var(--surface);
@@ -73,23 +102,31 @@
     border-radius: 10px;
     padding: 11px 8px;
     color: var(--text);
-    font-size: 13px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+    font-size: 13px; font-weight: 500;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
   }
   .tool:active { background: var(--surface-2); }
-  ul { list-style: none; flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+
+  ul { list-style: none; flex: 1; overflow-y: auto; padding: 0 20px 24px; }
   li {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
     background: var(--surface);
     border-radius: 12px;
-    padding: 16px;
+    padding: 15px;
     margin-bottom: 10px;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+  li.dragging { opacity: 0.5; }
+  li.drag-over { transform: translateY(2px); box-shadow: 0 0 0 2px var(--accent); }
+  .handle {
+    color: var(--muted);
+    font-size: 18px;
+    cursor: grab;
+    touch-action: none;
+    padding: 0 2px;
+    line-height: 1;
   }
   .check {
     width: 24px; height: 24px;
@@ -103,13 +140,10 @@
   li.done .check::after { content: "\2713"; color: #fff; font-size: 14px; }
   .label { flex: 1; font-size: 16px; word-break: break-word; }
   li.done .label { color: var(--muted); text-decoration: line-through; }
-  .del {
-    color: var(--danger);
-    background: none; border: none;
-    font-size: 20px; padding: 4px 8px; opacity: 0.6;
-  }
+  .del { color: var(--danger); background: none; border: none; font-size: 20px; padding: 4px 8px; opacity: 0.6; }
   .del:active { opacity: 1; }
-  .empty { text-align: center; color: var(--muted); margin-top: 60px; font-size: 15px; }
+  .empty { text-align: center; color: var(--muted); margin-top: 50px; font-size: 15px; line-height: 1.5; }
+
   .toast {
     position: fixed;
     left: 50%;
@@ -120,12 +154,11 @@
     padding: 12px 20px;
     border-radius: 10px;
     font-size: 14px;
-    opacity: 0;
-    pointer-events: none;
+    opacity: 0; pointer-events: none;
     transition: all 0.25s;
     box-shadow: 0 6px 24px rgba(0,0,0,0.4);
-    max-width: 80%;
-    text-align: center;
+    max-width: 80%; text-align: center;
+    z-index: 50;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   #file-input { display: none; }
@@ -136,36 +169,57 @@
     <h1>Todo</h1>
     <div class="sub" id="count"></div>
   </header>
+
+  <div class="cats" id="cats"></div>
+
   <div class="input-row">
     <input id="task-input" type="text" placeholder="Add a task\u2026" autocomplete="off" enterkeyhint="done">
     <button id="add-btn" aria-label="Add">+</button>
   </div>
+
   <div class="toolbar">
     <button class="tool" id="export-btn">Export</button>
     <button class="tool" id="import-btn">Import</button>
     <button class="tool" id="clear-done-btn">Clear done</button>
   </div>
   <input type="file" id="file-input" accept=".md,.markdown,.txt,text/markdown,text/plain">
+
   <ul id="list"></ul>
   <div class="toast" id="toast"></div>
 
 <script>
-  const KEY = "todos.v1";
+  const KEY = "todos.v2";
   const FILENAME = "Todos.md";
+
   const list = document.getElementById("list");
   const input = document.getElementById("task-input");
   const addBtn = document.getElementById("add-btn");
   const count = document.getElementById("count");
   const toast = document.getElementById("toast");
   const fileInput = document.getElementById("file-input");
+  const catsEl = document.getElementById("cats");
 
-  let todos = load();
+  // State shape: { categories: ["Home", ...], active: "Home", tasks: { "Home": [ {text, done} ] } }
+  let state = load();
 
-  function load() {
-    try { return JSON.parse(localStorage.getItem(KEY)) || []; }
-    catch { return []; }
+  function defaultState() {
+    return { categories: ["Home"], active: "Home", tasks: { "Home": [] } };
   }
-  function save() { localStorage.setItem(KEY, JSON.stringify(todos)); }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY));
+      if (s && s.categories && s.tasks) return s;
+    } catch (e) {}
+    // migrate old v1 flat list if present
+    try {
+      const old = JSON.parse(localStorage.getItem("todos.v1"));
+      if (Array.isArray(old) && old.length) {
+        return { categories: ["Home"], active: "Home", tasks: { "Home": old } };
+      }
+    } catch (e) {}
+    return defaultState();
+  }
+  function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
 
   let toastTimer;
   function showToast(msg) {
@@ -175,21 +229,98 @@
     toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 2200);
   }
 
-  function render() {
+  function activeTasks() { return state.tasks[state.active] || []; }
+
+  function renderCats() {
+    catsEl.innerHTML = "";
+    state.categories.forEach(function (cat) {
+      const el = document.createElement("button");
+      el.className = "cat" + (cat === state.active ? " active" : "");
+      const tasks = state.tasks[cat] || [];
+      const active = tasks.filter(function (t) { return !t.done; }).length;
+      const name = document.createElement("span");
+      name.textContent = cat;
+      el.appendChild(name);
+      if (tasks.length) {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = active;
+        el.appendChild(badge);
+      }
+      el.onclick = function () { state.active = cat; save(); render(); };
+      // long-press to rename/delete
+      let pressTimer;
+      el.addEventListener("touchstart", function () {
+        pressTimer = setTimeout(function () { manageCat(cat); }, 550);
+      }, { passive: true });
+      el.addEventListener("touchend", function () { clearTimeout(pressTimer); });
+      el.addEventListener("touchmove", function () { clearTimeout(pressTimer); });
+      catsEl.appendChild(el);
+    });
+    const add = document.createElement("button");
+    add.className = "cat addcat";
+    add.textContent = "+ Category";
+    add.onclick = addCategory;
+    catsEl.appendChild(add);
+  }
+
+  function addCategory() {
+    const name = (prompt("New category name") || "").trim();
+    if (!name) return;
+    if (state.categories.indexOf(name) !== -1) { showToast("Category already exists"); return; }
+    state.categories.push(name);
+    state.tasks[name] = [];
+    state.active = name;
+    save();
+    render();
+  }
+
+  function manageCat(cat) {
+    const action = (prompt(
+      'Category "' + cat + '"\n\nType:\n  R to rename\n  D to delete\n(Cancel to close)'
+    ) || "").trim().toLowerCase();
+    if (action === "r") {
+      const nn = (prompt("Rename to", cat) || "").trim();
+      if (!nn || nn === cat) return;
+      if (state.categories.indexOf(nn) !== -1) { showToast("Name already exists"); return; }
+      const idx = state.categories.indexOf(cat);
+      state.categories[idx] = nn;
+      state.tasks[nn] = state.tasks[cat];
+      delete state.tasks[cat];
+      if (state.active === cat) state.active = nn;
+      save(); render();
+    } else if (action === "d") {
+      if (state.categories.length === 1) { showToast("Keep at least one category"); return; }
+      if (!confirm('Delete "' + cat + '" and its tasks?')) return;
+      const idx = state.categories.indexOf(cat);
+      state.categories.splice(idx, 1);
+      delete state.tasks[cat];
+      if (state.active === cat) state.active = state.categories[0];
+      save(); render();
+    }
+  }
+
+  function renderList() {
     list.innerHTML = "";
-    if (todos.length === 0) {
+    const tasks = activeTasks();
+    if (tasks.length === 0) {
       const p = document.createElement("div");
       p.className = "empty";
-      p.textContent = "No tasks yet. Add one above.";
+      p.innerHTML = "No tasks in <b>" + state.active + "</b> yet.<br>Add one above.";
       list.appendChild(p);
     } else {
-      todos.forEach(function (t, i) {
+      tasks.forEach(function (t, i) {
         const li = document.createElement("li");
         if (t.done) li.className = "done";
+        li.dataset.index = i;
+
+        const handle = document.createElement("div");
+        handle.className = "handle";
+        handle.textContent = "\u2261";
 
         const check = document.createElement("div");
         check.className = "check";
-        check.onclick = function () { todos[i].done = !todos[i].done; save(); render(); };
+        check.onclick = function () { tasks[i].done = !tasks[i].done; save(); render(); };
 
         const label = document.createElement("div");
         label.className = "label";
@@ -198,52 +329,119 @@
         const del = document.createElement("button");
         del.className = "del";
         del.textContent = "\u2715";
-        del.onclick = function () { todos.splice(i, 1); save(); render(); };
+        del.onclick = function () { tasks.splice(i, 1); save(); render(); };
 
-        li.append(check, label, del);
+        li.append(handle, check, label, del);
+        attachDrag(li, handle, i);
         list.appendChild(li);
       });
     }
-    const active = todos.filter(function (t) { return !t.done; }).length;
-    count.textContent = todos.length ? active + " active \u00b7 " + todos.length + " total" : "";
+    const tot = tasks.length;
+    const act = tasks.filter(function (t) { return !t.done; }).length;
+    count.textContent = tot ? act + " active \u00b7 " + tot + " in " + state.active : state.active;
+  }
+
+  // ---- Touch + mouse drag reordering within the active category ----
+  let dragIndex = null;
+  function attachDrag(li, handle, index) {
+    function start(clientY) {
+      dragIndex = index;
+      li.classList.add("dragging");
+    }
+    function move(clientY) {
+      if (dragIndex === null) return;
+      const items = Array.prototype.slice.call(list.children).filter(function (n) { return n.tagName === "LI"; });
+      let target = null;
+      items.forEach(function (it) {
+        const r = it.getBoundingClientRect();
+        if (clientY > r.top && clientY < r.bottom) target = it;
+      });
+      items.forEach(function (it) { it.classList.remove("drag-over"); });
+      if (target && target !== li) target.classList.add("drag-over");
+    }
+    function end(clientY) {
+      if (dragIndex === null) return;
+      const items = Array.prototype.slice.call(list.children).filter(function (n) { return n.tagName === "LI"; });
+      let toIndex = dragIndex;
+      items.forEach(function (it) {
+        const r = it.getBoundingClientRect();
+        if (clientY > r.top && clientY < r.bottom) toIndex = parseInt(it.dataset.index, 10);
+      });
+      const tasks = activeTasks();
+      if (toIndex !== dragIndex && toIndex >= 0 && toIndex < tasks.length) {
+        const moved = tasks.splice(dragIndex, 1)[0];
+        tasks.splice(toIndex, 0, moved);
+        save();
+      }
+      dragIndex = null;
+      render();
+    }
+
+    handle.addEventListener("touchstart", function (e) {
+      start(e.touches[0].clientY);
+    }, { passive: true });
+    handle.addEventListener("touchmove", function (e) {
+      e.preventDefault();
+      move(e.touches[0].clientY);
+    }, { passive: false });
+    handle.addEventListener("touchend", function (e) {
+      end(e.changedTouches[0].clientY);
+    });
+
+    // mouse fallback for desktop testing
+    handle.addEventListener("mousedown", function (e) {
+      start(e.clientY);
+      function mm(ev) { move(ev.clientY); }
+      function mu(ev) { end(ev.clientY); document.removeEventListener("mousemove", mm); document.removeEventListener("mouseup", mu); }
+      document.addEventListener("mousemove", mm);
+      document.addEventListener("mouseup", mu);
+    });
   }
 
   function add() {
     const text = input.value.trim();
     if (!text) return;
-    todos.unshift({ text: text, done: false });
+    activeTasks().unshift({ text: text, done: false });
     input.value = "";
     save();
     render();
   }
 
-  // ---- Obsidian-compatible Markdown round-trip ----
-
+  // ---- Obsidian Markdown round-trip, grouped by category ----
   function toMarkdown() {
-    const lines = [
-      "# Todos",
-      "",
-      "*Exported " + new Date().toLocaleString() + "*",
-      ""
-    ];
-    todos.forEach(function (t) {
-      lines.push("- [" + (t.done ? "x" : " ") + "] " + t.text);
+    const lines = ["# Todos", "", "*Exported " + new Date().toLocaleString() + "*", ""];
+    state.categories.forEach(function (cat) {
+      lines.push("## " + cat);
+      lines.push("");
+      (state.tasks[cat] || []).forEach(function (t) {
+        lines.push("- [" + (t.done ? "x" : " ") + "] " + t.text);
+      });
+      lines.push("");
     });
-    lines.push("");
     return lines.join("\n");
   }
 
-  // Parse any Markdown: pick up every task-list line, ignore the rest.
-  // Matches "- [ ] text", "- [x] text", "* [X] text", "+ [ ] text",
-  // with optional leading whitespace (nested tasks).
   function fromMarkdown(text) {
-    const re = /^\s*[-*+]\s+\[( |x|X)\]\s+(.*\S)\s*$/;
-    const parsed = [];
+    const taskRe = /^\s*[-*+]\s+\[( |x|X)\]\s+(.*\S)\s*$/;
+    const headRe = /^##\s+(.*\S)\s*$/;
+    const cats = [];
+    const tasks = {};
+    let current = null;
     text.split(/\r?\n/).forEach(function (line) {
-      const m = line.match(re);
-      if (m) parsed.push({ text: m[2], done: m[1].toLowerCase() === "x" });
+      const h = line.match(headRe);
+      if (h) {
+        current = h[1];
+        if (cats.indexOf(current) === -1) { cats.push(current); tasks[current] = []; }
+        return;
+      }
+      const m = line.match(taskRe);
+      if (m) {
+        if (current === null) { current = "Home"; if (cats.indexOf(current) === -1) { cats.push(current); tasks[current] = []; } }
+        tasks[current].push({ text: m[2], done: m[1].toLowerCase() === "x" });
+      }
     });
-    return parsed;
+    if (cats.length === 0) return null;
+    return { categories: cats, active: cats[0], tasks: tasks };
   }
 
   function exportMd() {
@@ -251,44 +449,40 @@
     const blob = new Blob([md], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = FILENAME;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = FILENAME;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
     showToast("Exported " + FILENAME + " \u2014 save it to your vault");
   }
 
   function importMd() { fileInput.click(); }
-
   fileInput.addEventListener("change", function (e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function () {
       const parsed = fromMarkdown(reader.result);
-      if (parsed.length === 0) {
-        showToast("No tasks found in that file");
-      } else {
-        todos = parsed;
-        save();
-        render();
-        showToast("Imported " + parsed.length + " task" + (parsed.length === 1 ? "" : "s"));
-      }
+      if (!parsed) { showToast("No tasks found in that file"); fileInput.value = ""; return; }
+      state = parsed;
+      save(); render();
+      let n = 0;
+      parsed.categories.forEach(function (c) { n += parsed.tasks[c].length; });
+      showToast("Imported " + n + " task" + (n === 1 ? "" : "s") + " in " + parsed.categories.length + " categories");
       fileInput.value = "";
     };
     reader.readAsText(file);
   });
 
   function clearDone() {
-    const before = todos.length;
-    todos = todos.filter(function (t) { return !t.done; });
-    save();
-    render();
-    const removed = before - todos.length;
+    const tasks = activeTasks();
+    const before = tasks.length;
+    state.tasks[state.active] = tasks.filter(function (t) { return !t.done; });
+    save(); render();
+    const removed = before - state.tasks[state.active].length;
     showToast(removed ? "Cleared " + removed + " completed" : "Nothing to clear");
   }
+
+  function render() { renderCats(); renderList(); }
 
   addBtn.onclick = add;
   input.addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });

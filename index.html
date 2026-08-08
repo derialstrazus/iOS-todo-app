@@ -137,8 +137,60 @@
   .chip .ic { font-size: 15px; }
   .chip-icon-only { padding: 9px 0; min-width: 46px; justify-content: center; }
   .chip-icon-only .ic { font-size: 17px; }
+  .chip.chip-add { color: var(--accent); background: var(--surface-2); border-color: var(--surface-2); font-weight: 600; }
+
+  /* Organize sheet stacks above the create/edit sheet when opened from its chip */
+  #cat-backdrop { z-index: 80; }
+  #cat-sheet { z-index: 81; }
 
   .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
+
+  /* Organize-categories sheet rows */
+  #cat-list { display: flex; flex-direction: column; gap: 8px; }
+  .cat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface-2);
+    border-radius: 12px;
+    padding: 10px 12px;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+  .cat-row.dragging { opacity: 0.5; }
+  .cat-row.drag-over { transform: translateY(2px); box-shadow: 0 0 0 2px var(--accent); }
+  .cat-row .handle { color: var(--muted); font-size: 18px; touch-action: none; padding: 0 2px; line-height: 1; }
+  .cat-row input.cat-name {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 8px 8px;
+    color: var(--text);
+    font-size: 16px;
+    outline: none;
+  }
+  .cat-row input.cat-name:focus { border-color: var(--accent); background: var(--surface); }
+  .cat-row .cat-del {
+    color: var(--danger);
+    background: none; border: none;
+    font-size: 18px; padding: 4px 8px;
+    opacity: 0.7; flex-shrink: 0;
+  }
+  .cat-row .cat-del:active { opacity: 1; }
+  .cat-add-row { display: flex; gap: 10px; margin-top: 14px; }
+  .cat-add-row input {
+    flex: 1; min-width: 0;
+    background: var(--surface-2);
+    border: 1px solid transparent;
+    border-radius: 12px;
+    padding: 14px 16px;
+    color: var(--text);
+    font-size: 16px;
+    outline: none;
+  }
+  .cat-add-row input:focus { border-color: var(--accent); }
+  .cat-add-btn { flex: 0 0 auto; padding: 14px 20px; }
   .sheet-btn {
     flex: 1;
     border: none; border-radius: 12px;
@@ -303,7 +355,7 @@
 
   <div class="menu-backdrop" id="menu-backdrop"></div>
   <div class="menu" id="menu" role="menu">
-    <button class="menu-item" id="add-cat-btn" role="menuitem">＋ Add category</button>
+    <button class="menu-item" id="organize-cats-btn" role="menuitem">☰ Organize categories</button>
     <div class="menu-sep"></div>
     <button class="menu-item" id="export-btn" role="menuitem">↓ Export backup</button>
     <button class="menu-item" id="import-btn" role="menuitem">↑ Restore backup</button>
@@ -341,6 +393,25 @@
     </div>
   </div>
 
+  <div class="sheet-backdrop" id="cat-backdrop"></div>
+  <div class="sheet" id="cat-sheet" role="dialog" aria-modal="true">
+    <div class="sheet-grip"></div>
+
+    <div class="field">
+      <span class="field-label">Categories</span>
+      <div id="cat-list"></div>
+    </div>
+
+    <div class="cat-add-row">
+      <input id="cat-new-input" type="text" placeholder="New category name" autocomplete="off" enterkeyhint="done">
+      <button class="sheet-btn primary cat-add-btn" id="cat-add-btn">Add</button>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="sheet-btn secondary" id="cat-done-btn">Done</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
 <script>
@@ -360,6 +431,14 @@
   const sheetSave = document.getElementById("sheet-save");
   const sheetCancel = document.getElementById("sheet-cancel");
   const sheetDelete = document.getElementById("sheet-delete");
+
+  // Organize-categories sheet
+  const catSheet = document.getElementById("cat-sheet");
+  const catBackdrop = document.getElementById("cat-backdrop");
+  const catList = document.getElementById("cat-list");
+  const catNewInput = document.getElementById("cat-new-input");
+  const catAddBtn = document.getElementById("cat-add-btn");
+  const catDoneBtn = document.getElementById("cat-done-btn");
 
   // Available tags (icons rendered on tasks come in a later step; here they're selectable only)
   const TAGS = [
@@ -420,42 +499,178 @@
     toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 2200);
   }
 
-  function addCategory() {
-    const name = (prompt("New category name") || "").trim();
-    if (!name) return;
-    if (state.categories.indexOf(name) !== -1) { showToast("Category already exists"); return; }
+  // ---- Category operations (used by the organize-categories sheet) ----
+  // Each returns true on success, or a string error message on failure.
+  function createCategory(name) {
+    name = (name || "").trim();
+    if (!name) return "Enter a name";
+    if (state.categories.indexOf(name) !== -1) return "Category already exists";
     state.categories.push(name);
     state.tasks[name] = [];
-    state.active = name;
     save();
-    render();
+    return true;
   }
 
-  function manageCat(cat) {
-    const action = (prompt(
-      'Category "' + cat + '"\n\nType:\n  R to rename\n  D to delete\n(Cancel to close)'
-    ) || "").trim().toLowerCase();
-    if (action === "r") {
-      const nn = (prompt("Rename to", cat) || "").trim();
-      if (!nn || nn === cat) return;
-      if (state.categories.indexOf(nn) !== -1) { showToast("Name already exists"); return; }
-      const idx = state.categories.indexOf(cat);
-      state.categories[idx] = nn;
-      state.tasks[nn] = state.tasks[cat];
-      delete state.tasks[cat];
-      if (collapsed[cat] !== undefined) { collapsed[nn] = collapsed[cat]; delete collapsed[cat]; saveCollapsed(); }
-      if (state.active === cat) state.active = nn;
-      save(); render();
-    } else if (action === "d") {
-      if (state.categories.length === 1) { showToast("Keep at least one category"); return; }
-      if (!confirm('Delete "' + cat + '" and its tasks?')) return;
-      const idx = state.categories.indexOf(cat);
-      state.categories.splice(idx, 1);
-      delete state.tasks[cat];
-      delete collapsed[cat]; saveCollapsed();
-      if (state.active === cat) state.active = state.categories[0];
-      save(); render();
+  function renameCategory(oldName, newName) {
+    newName = (newName || "").trim();
+    if (!newName) return "Enter a name";
+    if (newName === oldName) return true;
+    if (state.categories.indexOf(newName) !== -1) return "Name already exists";
+    const idx = state.categories.indexOf(oldName);
+    if (idx === -1) return "Category not found";
+    state.categories[idx] = newName;
+    state.tasks[newName] = state.tasks[oldName];
+    delete state.tasks[oldName];
+    if (collapsed[oldName] !== undefined) { collapsed[newName] = collapsed[oldName]; delete collapsed[oldName]; saveCollapsed(); }
+    if (state.active === oldName) state.active = newName;
+    save();
+    return true;
+  }
+
+  function deleteCategory(cat) {
+    if (state.categories.length === 1) return "Keep at least one category";
+    const idx = state.categories.indexOf(cat);
+    if (idx === -1) return "Category not found";
+    state.categories.splice(idx, 1);
+    delete state.tasks[cat];
+    delete collapsed[cat]; saveCollapsed();
+    if (state.active === cat) state.active = state.categories[0];
+    save();
+    return true;
+  }
+
+  function moveCategory(fromIdx, toIdx) {
+    if (fromIdx === toIdx) return;
+    if (fromIdx < 0 || fromIdx >= state.categories.length) return;
+    if (toIdx < 0 || toIdx >= state.categories.length) return;
+    const moved = state.categories.splice(fromIdx, 1)[0];
+    state.categories.splice(toIdx, 0, moved);
+    save();
+  }
+
+  // ---- Organize-categories sheet ----
+  function openCatSheet() {
+    renderCatList();
+    catNewInput.value = "";
+    catBackdrop.classList.add("open");
+    catSheet.classList.add("open");
+  }
+  function closeCatSheet() {
+    catSheet.classList.remove("open");
+    catBackdrop.classList.remove("open");
+    // reflect any changes on the main list and, if the create/edit sheet is open, its chips
+    render();
+    if (sheetCtx) renderSheetChips();
+  }
+
+  function renderCatList() {
+    catList.innerHTML = "";
+    state.categories.forEach(function (cat, index) {
+      const row = document.createElement("div");
+      row.className = "cat-row";
+      row.dataset.index = index;
+
+      const handle = document.createElement("div");
+      handle.className = "handle";
+      handle.textContent = "\u2261";
+
+      const nameInput = document.createElement("input");
+      nameInput.className = "cat-name";
+      nameInput.type = "text";
+      nameInput.value = cat;
+      nameInput.setAttribute("enterkeyhint", "done");
+      // commit rename on blur or Enter
+      nameInput.dataset.original = cat;
+      nameInput.onblur = function () { commitRename(nameInput); };
+      nameInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); nameInput.blur(); }
+      });
+
+      const del = document.createElement("button");
+      del.className = "cat-del";
+      del.textContent = "\u2715";
+      del.onclick = function () { deleteFromCatSheet(cat); };
+
+      row.append(handle, nameInput, del);
+      attachCatDrag(row, handle, index);
+      catList.appendChild(row);
+    });
+  }
+
+  function commitRename(input) {
+    const original = input.dataset.original;
+    const next = input.value.trim();
+    if (next === original) { input.value = original; return; }
+    const res = renameCategory(original, next);
+    if (res !== true) {
+      showToast(res);
+      input.value = original; // revert on failure
+      return;
     }
+    input.dataset.original = next;
+    // re-render main view lazily on close; keep the sheet list stable otherwise
+  }
+
+  function deleteFromCatSheet(cat) {
+    if (state.categories.length === 1) { showToast("Keep at least one category"); return; }
+    const n = (state.tasks[cat] || []).length;
+    const msg = n > 0
+      ? 'Delete "' + cat + '" and its ' + n + ' task' + (n === 1 ? "" : "s") + "?"
+      : 'Delete "' + cat + '"?';
+    if (!confirm(msg)) return;
+    const res = deleteCategory(cat);
+    if (res !== true) { showToast(res); return; }
+    renderCatList();
+  }
+
+  function addFromCatSheet() {
+    const res = createCategory(catNewInput.value);
+    if (res !== true) { showToast(res); return; }
+    catNewInput.value = "";
+    renderCatList();
+    catNewInput.focus();
+  }
+
+  // Drag reordering of category rows (mirrors the task drag pattern)
+  let catDragIndex = null;
+  function attachCatDrag(row, handle, index) {
+    function siblings() {
+      return Array.prototype.slice.call(catList.children).filter(function (n) { return n.classList.contains("cat-row"); });
+    }
+    function start() { catDragIndex = index; row.classList.add("dragging"); }
+    function move(clientY) {
+      if (catDragIndex === null) return;
+      const items = siblings();
+      let target = null;
+      items.forEach(function (it) {
+        const r = it.getBoundingClientRect();
+        if (clientY > r.top && clientY < r.bottom) target = it;
+      });
+      items.forEach(function (it) { it.classList.remove("drag-over"); });
+      if (target && target !== row) target.classList.add("drag-over");
+    }
+    function end(clientY) {
+      if (catDragIndex === null) return;
+      const items = siblings();
+      let toIndex = catDragIndex;
+      items.forEach(function (it) {
+        const r = it.getBoundingClientRect();
+        if (clientY > r.top && clientY < r.bottom) toIndex = parseInt(it.dataset.index, 10);
+      });
+      moveCategory(catDragIndex, toIndex);
+      catDragIndex = null;
+      renderCatList();
+    }
+    handle.addEventListener("touchstart", function () { start(); }, { passive: true });
+    handle.addEventListener("touchmove", function (e) { e.preventDefault(); move(e.touches[0].clientY); }, { passive: false });
+    handle.addEventListener("touchend", function (e) { end(e.changedTouches[0].clientY); });
+    handle.addEventListener("mousedown", function (e) {
+      start();
+      function mm(ev) { move(ev.clientY); }
+      function mu(ev) { end(ev.clientY); document.removeEventListener("mousemove", mm); document.removeEventListener("mouseup", mu); }
+      document.addEventListener("mousemove", mm);
+      document.addEventListener("mouseup", mu);
+    });
   }
 
   // ---- Single-page render: one collapsible section per category ----
@@ -477,7 +692,7 @@
       const section = document.createElement("div");
       section.className = "section" + (isCollapsed ? " collapsed" : "");
 
-      // Header: tap to toggle collapse, long-press to rename/delete
+      // Header: tap to toggle collapse (category management lives in the organize sheet)
       const head = document.createElement("div");
       head.className = "sec-head";
 
@@ -495,19 +710,7 @@
 
       head.append(caret, title, cnt);
 
-      // long-press to rename/delete (replaces the old pill long-press)
-      let pressTimer, longFired = false;
-      head.addEventListener("touchstart", function () {
-        longFired = false;
-        pressTimer = setTimeout(function () { longFired = true; manageCat(cat); }, 550);
-      }, { passive: true });
-      head.addEventListener("touchend", function (e) {
-        clearTimeout(pressTimer);
-      });
-      head.addEventListener("touchmove", function () { clearTimeout(pressTimer); });
-
       head.onclick = function () {
-        if (longFired) { longFired = false; return; } // ignore the tap that ended a long-press
         collapsed[cat] = !collapsed[cat];
         saveCollapsed();
         section.classList.toggle("collapsed");
@@ -644,6 +847,12 @@
       chip.onclick = function () { sheetCtx.cat = cat; renderSheetChips(); updateSaveEnabled(); };
       sheetCats.appendChild(chip);
     });
+    // "New category" chip opens the organize sheet
+    const addChip = document.createElement("button");
+    addChip.className = "chip chip-add";
+    addChip.textContent = "\uFF0B New category";
+    addChip.onclick = function () { openCatSheet(); };
+    sheetCats.appendChild(addChip);
 
     sheetTags.innerHTML = "";
     // "None" option first, then the three tags
@@ -882,10 +1091,16 @@
 
   document.getElementById("show-all-btn").onclick = showAll;
   document.getElementById("collapse-all-btn").onclick = collapseAll;
-  document.getElementById("add-cat-btn").onclick = menuAction(addCategory);
+  document.getElementById("organize-cats-btn").onclick = menuAction(openCatSheet);
   document.getElementById("export-btn").onclick = menuAction(exportJson);
   document.getElementById("import-btn").onclick = menuAction(importJson);
   document.getElementById("clear-done-btn").onclick = menuAction(clearDone);
+
+  // Organize-categories sheet controls
+  catAddBtn.onclick = addFromCatSheet;
+  catNewInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addFromCatSheet(); });
+  catDoneBtn.onclick = closeCatSheet;
+  catBackdrop.onclick = closeCatSheet;
 
   render();
 </script>

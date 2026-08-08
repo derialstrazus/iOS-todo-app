@@ -135,6 +135,8 @@
   .chip:active { opacity: 0.75; }
   .chip.selected { border-color: var(--accent); background: rgba(79,156,249,0.18); color: var(--accent); }
   .chip .ic { font-size: 15px; }
+  .chip-icon-only { padding: 9px 0; min-width: 46px; justify-content: center; }
+  .chip-icon-only .ic { font-size: 17px; }
 
   .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
   .sheet-btn {
@@ -191,7 +193,7 @@
   .menu-sep { height: 1px; background: var(--surface-2); margin: 5px 8px; }
 
   /* Scroll region holding all category sections */
-  .scroll { flex: 1; overflow-y: auto; padding: 4px 20px 24px; -webkit-overflow-scrolling: touch; }
+  .scroll { flex: 1; overflow-y: auto; padding: 4px 20px calc(96px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
 
   .section { margin-bottom: 14px; }
   .sec-head {
@@ -254,6 +256,19 @@
   li.done .check::after { content: "\2713"; color: #fff; font-size: 14px; }
   .label { flex: 1; font-size: 16px; word-break: break-word; cursor: pointer; }
   li.done .label { color: var(--muted); text-decoration: line-through; }
+  .tag-icon {
+    flex-shrink: 0;
+    font-size: 15px;
+    line-height: 1;
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    background: var(--surface-2);
+  }
+  .tag-priority { background: rgba(249,109,95,0.16); }
+  .tag-pending { background: rgba(138,144,156,0.18); }
+  .tag-quick { background: rgba(79,156,249,0.16); }
+  li.done .tag-icon { opacity: 0.45; }
   .sec-empty { color: var(--muted); font-size: 14px; padding: 4px 4px 10px; }
   .empty-all { text-align: center; color: var(--muted); margin-top: 60px; font-size: 15px; line-height: 1.5; }
 
@@ -284,14 +299,14 @@
     <button class="ctrl menu-btn" id="menu-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">&#9776;</button>
   </div>
 
-  <input type="file" id="file-input" accept=".md,.markdown,.txt,text/markdown,text/plain">
+  <input type="file" id="file-input" accept=".json,application/json">
 
   <div class="menu-backdrop" id="menu-backdrop"></div>
   <div class="menu" id="menu" role="menu">
     <button class="menu-item" id="add-cat-btn" role="menuitem">＋ Add category</button>
     <div class="menu-sep"></div>
-    <button class="menu-item" id="export-btn" role="menuitem">↓ Export</button>
-    <button class="menu-item" id="import-btn" role="menuitem">↑ Import</button>
+    <button class="menu-item" id="export-btn" role="menuitem">↓ Export backup</button>
+    <button class="menu-item" id="import-btn" role="menuitem">↑ Restore backup</button>
     <div class="menu-sep"></div>
     <button class="menu-item danger" id="clear-done-btn" role="menuitem">✕ Clear done</button>
   </div>
@@ -330,7 +345,6 @@
 
 <script>
   const KEY = "todos.v2";
-  const FILENAME = "Todos.md";
 
   const scroll = document.getElementById("scroll");
   const toast = document.getElementById("toast");
@@ -353,6 +367,11 @@
     { id: "pending", label: "Pending", icon: "\u231B" },
     { id: "quick", label: "Quick", icon: "\u26A1" }
   ];
+  function tagById(id) {
+    if (!id) return null;
+    for (let i = 0; i < TAGS.length; i++) { if (TAGS[i].id === id) return TAGS[i]; }
+    return null;
+  }
 
   // Transient state for whatever the sheet is currently editing/creating
   let sheetCtx = null; // { mode:'create'|'edit', cat, tag, taskCat, taskIndex }
@@ -361,7 +380,7 @@
   // `active` is retained for back-compat; here it's the default category for the Add box.
   let state = load();
 
-  // Per-category collapsed state, keyed by category name. Kept in localStorage, not exported to Markdown.
+  // Per-category collapsed state, keyed by category name. Kept in localStorage; not part of the JSON backup.
   const COLLAPSE_KEY = "todos.v2.collapsed";
   let collapsed = loadCollapsed();
 
@@ -528,6 +547,18 @@
           })(cat, i);
 
           li.append(handle, check, label);
+
+          // Tag icon (display only; ordering handled in a later step)
+          const tagDef = tagById(t.tag);
+          if (tagDef) {
+            const badge = document.createElement("span");
+            badge.className = "tag-icon tag-" + tagDef.id;
+            badge.textContent = tagDef.icon;
+            badge.setAttribute("aria-label", tagDef.label);
+            badge.title = tagDef.label;
+            li.appendChild(badge);
+          }
+
           attachDrag(li, handle, cat, i);
           body.appendChild(li);
         });
@@ -623,12 +654,13 @@
     sheetTags.appendChild(none);
     TAGS.forEach(function (t) {
       const chip = document.createElement("button");
-      chip.className = "chip" + (sheetCtx.tag === t.id ? " selected" : "");
+      chip.className = "chip chip-icon-only" + (sheetCtx.tag === t.id ? " selected" : "");
+      chip.setAttribute("aria-label", t.label);
+      chip.title = t.label;
       const ic = document.createElement("span");
       ic.className = "ic";
       ic.textContent = t.icon;
       chip.appendChild(ic);
-      chip.appendChild(document.createTextNode(t.label));
       chip.onclick = function () { sheetCtx.tag = t.id; renderSheetChips(); };
       sheetTags.appendChild(chip);
     });
@@ -729,71 +761,74 @@
     render();
   }
 
-  // ---- Obsidian Markdown round-trip, grouped by category ----
-  function toMarkdown() {
-    const lines = ["# Todos", "", "*Exported " + new Date().toLocaleString() + "*", ""];
-    state.categories.forEach(function (cat) {
-      lines.push("## " + cat);
-      lines.push("");
-      (state.tasks[cat] || []).forEach(function (t) {
-        lines.push("- [" + (t.done ? "x" : " ") + "] " + t.text);
-      });
-      lines.push("");
-    });
-    return lines.join("\n");
-  }
+  // ---- JSON backup / restore (full-fidelity: categories, tasks, tags, and any future fields) ----
+  const BACKUP_VERSION = 1;
 
-  function fromMarkdown(text) {
-    const taskRe = /^\s*[-*+]\s+\[( |x|X)\]\s+(.*\S)\s*$/;
-    const headRe = /^##\s+(.*\S)\s*$/;
-    const cats = [];
-    const tasks = {};
-    let current = null;
-    text.split(/\r?\n/).forEach(function (line) {
-      const h = line.match(headRe);
-      if (h) {
-        current = h[1];
-        if (cats.indexOf(current) === -1) { cats.push(current); tasks[current] = []; }
-        return;
-      }
-      const m = line.match(taskRe);
-      if (m) {
-        if (current === null) { current = "Home"; if (cats.indexOf(current) === -1) { cats.push(current); tasks[current] = []; } }
-        tasks[current].push({ text: m[2], done: m[1].toLowerCase() === "x" });
-      }
-    });
-    if (cats.length === 0) return null;
-    return { categories: cats, active: cats[0], tasks: tasks };
-  }
-
-  function exportMd() {
-    const md = toMarkdown();
-    const blob = new Blob([md], { type: "text/markdown" });
+  function exportJson() {
+    const payload = {
+      app: "todo",
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      state: state
+    };
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
+    const d = new Date();
+    const stamp = d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
     const a = document.createElement("a");
-    a.href = url; a.download = FILENAME;
+    a.href = url; a.download = "todos-backup-" + stamp + ".json";
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-    showToast("Exported " + FILENAME + " \u2014 save it to your vault");
+    showToast("Exported backup \u2014 save it somewhere safe");
   }
 
-  function importMd() { fileInput.click(); }
+  // Accepts either a full backup envelope { state: {...} } or a bare state object.
+  function parseBackup(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (e) { return null; }
+    const st = data && data.state ? data.state : data;
+    if (!st || !Array.isArray(st.categories) || typeof st.tasks !== "object" || !st.tasks) return null;
+    // sanity-check that every category has a task array
+    for (let i = 0; i < st.categories.length; i++) {
+      const c = st.categories[i];
+      if (!Array.isArray(st.tasks[c])) st.tasks[c] = [];
+    }
+    if (st.categories.length === 0) return null;
+    if (!st.active || st.categories.indexOf(st.active) === -1) st.active = st.categories[0];
+    return st;
+  }
+
+  function importJson() { fileInput.click(); }
   fileInput.addEventListener("change", function (e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function () {
-      const parsed = fromMarkdown(reader.result);
-      if (!parsed) { showToast("No tasks found in that file"); fileInput.value = ""; return; }
+      const parsed = parseBackup(reader.result);
+      if (!parsed) { showToast("That file isn't a valid backup"); fileInput.value = ""; return; }
+      let n = 0;
+      parsed.categories.forEach(function (c) { n += (parsed.tasks[c] || []).length; });
+      if (!confirm("Restore this backup? It replaces your current " +
+          countAllTasks() + " task(s) with " + n + " task(s).")) {
+        fileInput.value = "";
+        return;
+      }
       state = parsed;
       save(); render();
-      let n = 0;
-      parsed.categories.forEach(function (c) { n += parsed.tasks[c].length; });
-      showToast("Imported " + n + " task" + (n === 1 ? "" : "s") + " in " + parsed.categories.length + " categories");
+      showToast("Restored " + n + " task" + (n === 1 ? "" : "s") + " in " + parsed.categories.length + " categories");
       fileInput.value = "";
     };
     reader.readAsText(file);
   });
+
+  function countAllTasks() {
+    let n = 0;
+    state.categories.forEach(function (c) { n += (state.tasks[c] || []).length; });
+    return n;
+  }
 
   function clearDone() {
     // Single-page view has no active category, so clear completed across all categories.
@@ -836,7 +871,7 @@
   function toggleMenu() {
     if (menu.classList.contains("open")) closeMenu(); else openMenu();
   }
-  // Run a menu action, then close the menu. importMd opens a file picker,
+  // Run a menu action, then close the menu. importJson opens a file picker,
   // which is fine to fire after closing.
   function menuAction(fn) {
     return function () { closeMenu(); fn(); };
@@ -848,8 +883,8 @@
   document.getElementById("show-all-btn").onclick = showAll;
   document.getElementById("collapse-all-btn").onclick = collapseAll;
   document.getElementById("add-cat-btn").onclick = menuAction(addCategory);
-  document.getElementById("export-btn").onclick = menuAction(exportMd);
-  document.getElementById("import-btn").onclick = menuAction(importMd);
+  document.getElementById("export-btn").onclick = menuAction(exportJson);
+  document.getElementById("import-btn").onclick = menuAction(importJson);
   document.getElementById("clear-done-btn").onclick = menuAction(clearDone);
 
   render();

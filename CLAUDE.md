@@ -60,31 +60,32 @@ Delivered and in active use:
 - Creation sheet orders Task before Category; Show All / Collapse All live in
   the hamburger menu; Category Organizer's "Add" button disables on empty
   input; compact task-row padding.
+- Add-task shortcut per category: a soft-tinted blue "+" circle on each
+  category header (replacing the task count) opens the creation sheet with
+  Category hidden/locked to that category.
 
 ## Backlog (build individually, in priority order)
 
-1. **Add-task shortcut per category** — a "+" button on each category box,
-   replacing the task count, to add a task directly into that category.
-2. **Category tags** — tag categories as "Home" or "Work".
-3. **Work Mode / Home Mode toggle**, replacing Show All / Collapse All at the
+1. **Category tags** — tag categories as "Home" or "Work".
+2. **Work Mode / Home Mode toggle**, replacing Show All / Collapse All at the
    top — moves Work or Home categories to the top based on the selected mode.
-   Depends on #2 (needs category tags to know which categories qualify).
-4. **Recurring tasks** — on app launch, check the recurring-tasks list and add
+   Depends on #1 (needs category tags to know which categories qualify).
+3. **Recurring tasks** — on app launch, check the recurring-tasks list and add
    any that are due; track each recurring task's last-added date in
    localStorage to determine when it's due again.
-5. **Timestamps** — record `createdAt` and `completedAt` on tasks.
-6. **Comments on tasks** — shown as italics on the main page.
-7. **Archive completed tasks.**
-8. **Bug fixes:**
+4. **Timestamps** — record `createdAt` and `completedAt` on tasks.
+5. **Comments on tasks** — shown as italics on the main page.
+6. **Archive completed tasks.**
+7. **Bug fixes:**
    1. iPhone: extra gap at the bottom of the screen (screenshot pending from user).
    2. iPhone: keyboard sometimes doesn't dismiss after a task is saved.
-9. **Exercise tracker** — depends on #7 (archiving must exist first). Track
+8. **Exercise tracker** — depends on #6 (archiving must exist first). Track
    past exercises; long-term, show a GitHub-contributions-style calendar
    checklist of exercise history.
 
 ### Parked / long-term
 
-- Exercise tracker calendar view (the long-term half of #9 — build the
+- Exercise tracker calendar view (the long-term half of #8 — build the
   basic tracker first, calendar view later).
 
 ## Testing (planned)

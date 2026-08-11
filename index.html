@@ -265,14 +265,19 @@
   }
   .section.collapsed .sec-caret { transform: rotate(-90deg); }
   .sec-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; flex: 1; }
-  .sec-count {
-    font-size: 12px;
-    color: var(--muted);
-    background: var(--surface-2);
-    border-radius: 10px;
-    padding: 2px 8px;
-    min-width: 20px; text-align: center;
+  .sec-add {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(79,156,249,0.18);
+    color: var(--accent);
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1;
+    display: flex; align-items: center; justify-content: center;
   }
+  .sec-add:active { background: rgba(79,156,249,0.3); }
   .section.collapsed .sec-body { display: none; }
 
   li {
@@ -377,7 +382,7 @@
       <input id="sheet-text" type="text" placeholder="What needs doing?" autocomplete="off" enterkeyhint="done">
     </div>
 
-    <div class="field">
+    <div class="field" id="sheet-cat-field">
       <span class="field-label">Category</span>
       <div class="chips" id="sheet-cats"></div>
     </div>
@@ -427,6 +432,7 @@
   const sheet = document.getElementById("sheet");
   const sheetBackdrop = document.getElementById("sheet-backdrop");
   const sheetText = document.getElementById("sheet-text");
+  const sheetCatField = document.getElementById("sheet-cat-field");
   const sheetCats = document.getElementById("sheet-cats");
   const sheetTags = document.getElementById("sheet-tags");
   const sheetSave = document.getElementById("sheet-save");
@@ -711,11 +717,16 @@
       title.className = "sec-title";
       title.textContent = cat;
 
-      const cnt = document.createElement("span");
-      cnt.className = "sec-count";
-      cnt.textContent = tasks.filter(function (t) { return !t.done; }).length;
+      const addBtn = document.createElement("button");
+      addBtn.className = "sec-add";
+      addBtn.textContent = "+";
+      addBtn.setAttribute("aria-label", "Add task to " + cat);
+      addBtn.onclick = function (e) {
+        e.stopPropagation();
+        openCreate(cat);
+      };
 
-      head.append(caret, title, cnt);
+      head.append(caret, title, addBtn);
 
       head.onclick = function () {
         collapsed[cat] = !collapsed[cat];
@@ -892,6 +903,7 @@
     sheetCtx = ctx;
     sheetSave.textContent = ctx.mode === "edit" ? "Save" : "Add task";
     sheetDelete.style.display = ctx.mode === "edit" ? "" : "none";
+    sheetCatField.style.display = ctx.catLocked ? "none" : "";
     sheetText.value = ctx.text || "";
     renderSheetChips();
     updateSaveEnabled();
@@ -907,8 +919,8 @@
     sheetCtx = null;
   }
 
-  function openCreate() {
-    openSheet({ mode: "create", cat: null, tag: null, text: "" });
+  function openCreate(presetCat) {
+    openSheet({ mode: "create", cat: presetCat || null, tag: null, text: "", catLocked: !!presetCat });
   }
 
   function openEdit(cat, index) {
@@ -1059,7 +1071,7 @@
     showToast(removed ? "Cleared " + removed + " completed" : "Nothing to clear");
   }
 
-  fab.onclick = openCreate;
+  fab.onclick = function () { openCreate(); };
   sheetSave.onclick = saveSheet;
   sheetCancel.onclick = closeSheet;
   sheetDelete.onclick = deleteFromSheet;

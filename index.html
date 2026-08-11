@@ -54,6 +54,8 @@
     display: flex; align-items: center; gap: 6px;
   }
   .ctrl:active { background: var(--surface-2); }
+  .mode-btn.active.mode-home { border-color: var(--home); background: rgba(87,194,120,0.18); color: var(--home); }
+  .mode-btn.active.mode-work { border-color: var(--accent); background: rgba(79,156,249,0.18); color: var(--accent); }
 
   /* Floating add button (bottom-right) */
   .fab {
@@ -372,6 +374,8 @@
 </head>
 <body>
   <div class="controls">
+    <button class="ctrl mode-btn mode-home" id="home-mode-btn">🏠 Home</button>
+    <button class="ctrl mode-btn mode-work" id="work-mode-btn">💼 Work</button>
     <button class="ctrl menu-btn" id="menu-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">&#9776;</button>
   </div>
 
@@ -447,6 +451,8 @@
   const scroll = document.getElementById("scroll");
   const toast = document.getElementById("toast");
   const fileInput = document.getElementById("file-input");
+  const homeModeBtn = document.getElementById("home-mode-btn");
+  const workModeBtn = document.getElementById("work-mode-btn");
 
   // FAB + bottom sheet
   const fab = document.getElementById("fab");
@@ -501,6 +507,11 @@
   const COLLAPSE_KEY = "todos.v2.collapsed";
   let collapsed = loadCollapsed();
 
+  // Work Mode / Home Mode: "home" | "work" | null. Purely a render-time sort + collapse
+  // preset — never mutates state.categories. Kept in localStorage; not part of the JSON backup.
+  const MODE_KEY = "todos.v2.mode";
+  let viewMode = loadViewMode();
+
   function defaultState() {
     return { categories: ["Home"], active: "Home", tasks: { "Home": [] }, categoryTags: {} };
   }
@@ -531,6 +542,45 @@
     return {};
   }
   function saveCollapsed() { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed)); }
+
+  function loadViewMode() {
+    const m = localStorage.getItem(MODE_KEY);
+    return (m === "home" || m === "work") ? m : null;
+  }
+  function saveViewMode() {
+    if (viewMode) localStorage.setItem(MODE_KEY, viewMode);
+    else localStorage.removeItem(MODE_KEY);
+  }
+
+  // Selecting a mode expands categories tagged with it and collapses categories tagged with
+  // the opposite; untagged categories are left as-is. Tapping the active mode again clears it
+  // and expands everything. Category order itself is never mutated (see displayCategories()).
+  function setViewMode(next) {
+    if (viewMode === next) {
+      viewMode = null;
+      state.categories.forEach(function (c) { collapsed[c] = false; });
+    } else {
+      viewMode = next;
+      const opposite = next === "home" ? "work" : "home";
+      state.categories.forEach(function (c) {
+        const tag = state.categoryTags[c];
+        if (tag === next) collapsed[c] = false;
+        else if (tag === opposite) collapsed[c] = true;
+      });
+    }
+    saveViewMode();
+    saveCollapsed();
+    render();
+  }
+
+  function displayCategories() {
+    if (!viewMode) return state.categories.slice();
+    const matched = [], rest = [];
+    state.categories.forEach(function (c) {
+      (state.categoryTags[c] === viewMode ? matched : rest).push(c);
+    });
+    return matched.concat(rest);
+  }
 
   let toastTimer;
   function showToast(msg) {
@@ -740,6 +790,8 @@
   // ---- Single-page render: one collapsible section per category ----
   function render() {
     scroll.innerHTML = "";
+    homeModeBtn.classList.toggle("active", viewMode === "home");
+    workModeBtn.classList.toggle("active", viewMode === "work");
 
     if (state.categories.length === 0) {
       const p = document.createElement("div");
@@ -749,7 +801,7 @@
       return;
     }
 
-    state.categories.forEach(function (cat) {
+    displayCategories().forEach(function (cat) {
       const tasks = state.tasks[cat] || [];
       const isCollapsed = !!collapsed[cat];
 
@@ -1160,6 +1212,9 @@
 
   menuBtn.onclick = toggleMenu;
   menuBackdrop.onclick = closeMenu;
+
+  homeModeBtn.onclick = function () { setViewMode("home"); };
+  workModeBtn.onclick = function () { setViewMode("work"); };
 
   document.getElementById("show-all-btn").onclick = menuAction(showAll);
   document.getElementById("collapse-all-btn").onclick = menuAction(collapseAll);

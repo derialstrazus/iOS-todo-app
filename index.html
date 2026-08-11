@@ -21,6 +21,7 @@
     --muted: #8a909c;
     --accent: #4f9cf9;
     --danger: #f96d5f;
+    --home: #57c278;
   }
   html, body {
     background: var(--bg);
@@ -178,6 +179,19 @@
     opacity: 0.7; flex-shrink: 0;
   }
   .cat-row .cat-del:active { opacity: 1; }
+  .cat-tag-btn {
+    flex-shrink: 0;
+    width: 30px; height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cat-tag-btn.tag-home { background: rgba(87,194,120,0.18); }
+  .cat-tag-btn.tag-work { background: rgba(79,156,249,0.18); }
+  .cat-tag-btn:active { opacity: 0.75; }
   .cat-add-row { display: flex; gap: 10px; margin-top: 14px; }
   .cat-add-row input {
     flex: 1; min-width: 0;
@@ -247,7 +261,14 @@
   /* Scroll region holding all category sections */
   .scroll { flex: 1; overflow-y: auto; padding: 4px 20px calc(96px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
 
-  .section { margin-bottom: 14px; }
+  .section {
+    margin-bottom: 14px;
+    border-left: 3px solid transparent;
+    padding-left: 8px;
+    margin-left: -11px;
+  }
+  .section.tag-home { border-left-color: var(--home); }
+  .section.tag-work { border-left-color: var(--accent); }
   .sec-head {
     display: flex;
     align-items: center;
@@ -459,11 +480,21 @@
     return null;
   }
 
+  // Category tags: "home" | "work" | null (untagged). Cycled via a badge in the organize sheet
+  // and shown as a colored accent bar on the main-screen category section.
+  function catTagGlyph(tag) {
+    if (tag === "home") return "🏠";
+    if (tag === "work") return "💼";
+    return "○";
+  }
+
   // Transient state for whatever the sheet is currently editing/creating
   let sheetCtx = null; // { mode:'create'|'edit', cat, tag, taskCat, taskIndex }
 
-  // State shape: { categories: ["Home", ...], active: "Home", tasks: { "Home": [ {text, done} ] } }
+  // State shape: { categories: ["Home", ...], active: "Home", tasks: { "Home": [ {text, done} ] },
+  //   categoryTags: { "Home": "home" | "work" } }
   // `active` is retained for back-compat; here it's the default category for the Add box.
+  // `categoryTags` is sparse: a category with no entry is untagged.
   let state = load();
 
   // Per-category collapsed state, keyed by category name. Kept in localStorage; not part of the JSON backup.
@@ -471,18 +502,21 @@
   let collapsed = loadCollapsed();
 
   function defaultState() {
-    return { categories: ["Home"], active: "Home", tasks: { "Home": [] } };
+    return { categories: ["Home"], active: "Home", tasks: { "Home": [] }, categoryTags: {} };
   }
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
-      if (s && s.categories && s.tasks) return s;
+      if (s && s.categories && s.tasks) {
+        if (!s.categoryTags || typeof s.categoryTags !== "object") s.categoryTags = {};
+        return s;
+      }
     } catch (e) {}
     // migrate old v1 flat list if present
     try {
       const old = JSON.parse(localStorage.getItem("todos.v1"));
       if (Array.isArray(old) && old.length) {
-        return { categories: ["Home"], active: "Home", tasks: { "Home": old } };
+        return { categories: ["Home"], active: "Home", tasks: { "Home": old }, categoryTags: {} };
       }
     } catch (e) {}
     return defaultState();
@@ -528,6 +562,7 @@
     state.categories[idx] = newName;
     state.tasks[newName] = state.tasks[oldName];
     delete state.tasks[oldName];
+    if (state.categoryTags[oldName] !== undefined) { state.categoryTags[newName] = state.categoryTags[oldName]; delete state.categoryTags[oldName]; }
     if (collapsed[oldName] !== undefined) { collapsed[newName] = collapsed[oldName]; delete collapsed[oldName]; saveCollapsed(); }
     if (state.active === oldName) state.active = newName;
     save();
@@ -540,10 +575,19 @@
     if (idx === -1) return "Category not found";
     state.categories.splice(idx, 1);
     delete state.tasks[cat];
+    delete state.categoryTags[cat];
     delete collapsed[cat]; saveCollapsed();
     if (state.active === cat) state.active = state.categories[0];
     save();
     return true;
+  }
+
+  // Cycle a category's tag: none -> home -> work -> none
+  function cycleCategoryTag(cat) {
+    const current = state.categoryTags[cat] || null;
+    const next = !current ? "home" : current === "home" ? "work" : null;
+    if (next) state.categoryTags[cat] = next; else delete state.categoryTags[cat];
+    save();
   }
 
   function moveCategory(fromIdx, toIdx) {
@@ -598,12 +642,19 @@
         if (e.key === "Enter") { e.preventDefault(); nameInput.blur(); }
       });
 
+      const curTag = state.categoryTags[cat] || null;
+      const tagBtn = document.createElement("button");
+      tagBtn.className = "cat-tag-btn" + (curTag ? " tag-" + curTag : "");
+      tagBtn.textContent = catTagGlyph(curTag);
+      tagBtn.setAttribute("aria-label", "Category tag: " + (curTag || "none") + ", tap to change");
+      tagBtn.onclick = function () { cycleCategoryTag(cat); renderCatList(); };
+
       const del = document.createElement("button");
       del.className = "cat-del";
       del.textContent = "\u2715";
       del.onclick = function () { deleteFromCatSheet(cat); };
 
-      row.append(handle, nameInput, del);
+      row.append(handle, nameInput, tagBtn, del);
       attachCatDrag(row, handle, index);
       catList.appendChild(row);
     });
@@ -703,7 +754,8 @@
       const isCollapsed = !!collapsed[cat];
 
       const section = document.createElement("div");
-      section.className = "section" + (isCollapsed ? " collapsed" : "");
+      const catTag = state.categoryTags[cat] || null;
+      section.className = "section" + (isCollapsed ? " collapsed" : "") + (catTag ? " tag-" + catTag : "");
 
       // Header: tap to toggle collapse (category management lives in the organize sheet)
       const head = document.createElement("div");
@@ -1026,6 +1078,7 @@
     }
     if (st.categories.length === 0) return null;
     if (!st.active || st.categories.indexOf(st.active) === -1) st.active = st.categories[0];
+    if (!st.categoryTags || typeof st.categoryTags !== "object") st.categoryTags = {};
     return st;
   }
 

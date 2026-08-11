@@ -281,8 +281,8 @@
     gap: 12px;
     background: var(--surface);
     border-radius: 12px;
-    padding: 15px;
-    margin-bottom: 10px;
+    padding: 9px 15px;
+    margin-bottom: 6px;
     list-style: none;
     transition: transform 0.12s ease, opacity 0.12s ease;
   }
@@ -346,8 +346,6 @@
 </head>
 <body>
   <div class="controls">
-    <button class="ctrl" id="show-all-btn">Show all</button>
-    <button class="ctrl" id="collapse-all-btn">Collapse all</button>
     <button class="ctrl menu-btn" id="menu-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">&#9776;</button>
   </div>
 
@@ -355,6 +353,9 @@
 
   <div class="menu-backdrop" id="menu-backdrop"></div>
   <div class="menu" id="menu" role="menu">
+    <button class="menu-item" id="show-all-btn" role="menuitem">Show all</button>
+    <button class="menu-item" id="collapse-all-btn" role="menuitem">Collapse all</button>
+    <div class="menu-sep"></div>
     <button class="menu-item" id="organize-cats-btn" role="menuitem">☰ Organize categories</button>
     <div class="menu-sep"></div>
     <button class="menu-item" id="export-btn" role="menuitem">↓ Export backup</button>
@@ -372,13 +373,13 @@
     <div class="sheet-grip"></div>
 
     <div class="field">
-      <span class="field-label">Category</span>
-      <div class="chips" id="sheet-cats"></div>
+      <label class="field-label" for="sheet-text">Task</label>
+      <input id="sheet-text" type="text" placeholder="What needs doing?" autocomplete="off" enterkeyhint="done">
     </div>
 
     <div class="field">
-      <label class="field-label" for="sheet-text">Task</label>
-      <input id="sheet-text" type="text" placeholder="What needs doing?" autocomplete="off" enterkeyhint="done">
+      <span class="field-label">Category</span>
+      <div class="chips" id="sheet-cats"></div>
     </div>
 
     <div class="field">
@@ -552,8 +553,13 @@
   function openCatSheet() {
     renderCatList();
     catNewInput.value = "";
+    updateCatAddEnabled();
     catBackdrop.classList.add("open");
     catSheet.classList.add("open");
+  }
+
+  function updateCatAddEnabled() {
+    catAddBtn.disabled = !catNewInput.value.trim();
   }
   function closeCatSheet() {
     catSheet.classList.remove("open");
@@ -627,6 +633,7 @@
     const res = createCategory(catNewInput.value);
     if (res !== true) { showToast(res); return; }
     catNewInput.value = "";
+    updateCatAddEnabled();
     renderCatList();
     catNewInput.focus();
   }
@@ -1089,8 +1096,8 @@
   menuBtn.onclick = toggleMenu;
   menuBackdrop.onclick = closeMenu;
 
-  document.getElementById("show-all-btn").onclick = showAll;
-  document.getElementById("collapse-all-btn").onclick = collapseAll;
+  document.getElementById("show-all-btn").onclick = menuAction(showAll);
+  document.getElementById("collapse-all-btn").onclick = menuAction(collapseAll);
   document.getElementById("organize-cats-btn").onclick = menuAction(openCatSheet);
   document.getElementById("export-btn").onclick = menuAction(exportJson);
   document.getElementById("import-btn").onclick = menuAction(importJson);
@@ -1098,7 +1105,8 @@
 
   // Organize-categories sheet controls
   catAddBtn.onclick = addFromCatSheet;
-  catNewInput.addEventListener("keydown", function (e) { if (e.key === "Enter") addFromCatSheet(); });
+  catNewInput.addEventListener("input", updateCatAddEnabled);
+  catNewInput.addEventListener("keydown", function (e) { if (e.key === "Enter" && !catAddBtn.disabled) addFromCatSheet(); });
   catDoneBtn.onclick = closeCatSheet;
   catBackdrop.onclick = closeCatSheet;
 

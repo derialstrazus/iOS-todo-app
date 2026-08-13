@@ -50,7 +50,7 @@ Delivered and in active use:
   (category chip picker, task name, optional tag).
 - Edit-via-tap reusing the same sheet, with Delete.
 - Tag icons on task rows (❗ ⌛ ⚡ with colored backgrounds).
-- Hamburger menu consolidating Export, Restore, Clear done, and Organize
+- Hamburger menu consolidating Export, Restore, Archive done, and Organize
   categories.
 - Organize-categories sheet: inline rename, drag-to-reorder, delete with
   task-count confirmation.
@@ -71,26 +71,57 @@ Delivered and in active use:
   collapses opposite-tag categories, and leaves untagged categories untouched.
   Tapping the active mode again clears it. Display-only sort — never mutates
   the saved category order.
+- Timestamps: `createdAt` set once at task creation; `completedAt` set when a
+  task is checked done and cleared back to `null` if unchecked. Tasks created
+  before this shipped simply lack the fields until next touched.
+- Archive completed tasks: hamburger menu's "Archive done" moves all
+  completed tasks (across every category) out of `state` into a separate
+  `todos.v2.archive` localStorage key, instead of deleting them. Keeping it
+  a separate key (rather than folding archive into `state`) means routine
+  saves — checking a box, dragging a row — never have to re-serialize
+  accumulated history. Included in JSON export/restore for full fidelity.
+  Write-only in the UI for now; no in-app way to browse it yet (see backlog).
+  At ~5000 archived tasks, prompts to export a backup and trims the archive
+  down to the most recent 2500.
 
 ## Backlog (build individually, in priority order)
 
-1. **Recurring tasks** — on app launch, check the recurring-tasks list and add
+1. **Reorganize categories on the home page** — reorder categories directly
+   in the main single-page view (drag-to-reorder in place), rather than only
+   via the separate Organize Categories sheet.
+2. **Recurring tasks** — on app launch, check the recurring-tasks list and add
    any that are due; track each recurring task's last-added date in
    localStorage to determine when it's due again.
-2. **Timestamps** — record `createdAt` and `completedAt` on tasks.
 3. **Comments on tasks** — shown as italics on the main page.
-4. **Archive completed tasks.**
-5. **Bug fixes:**
-   1. iPhone: extra gap at the bottom of the screen (screenshot pending from user).
+4. **Bug fixes:**
+   1. iPhone: extra gap at the bottom of the screen, below the last row.
+      Repro: happens after double-tapping the page.
    2. iPhone: keyboard sometimes doesn't dismiss after a task is saved.
-6. **Exercise tracker** — depends on #4 (archiving must exist first). Track
+      Repro: happens when hitting the blue checkmark/return key on the
+      keyboard rather than tapping away.
+5. **Exercise tracker** — archiving now exists, so this is unblocked. Track
    past exercises; long-term, show a GitHub-contributions-style calendar
    checklist of exercise history.
+6. **Styling update** — sleek "steel and glass" visual refresh. Reference:
+   [gameuidatabase.com](https://www.gameuidatabase.com/), specifically the
+   Endless Space 2, Starfield, Final Fantasy XV, Metal Gear Solid V: The
+   Phantom Pain, Deus Ex: Human Revolution, Armored Core 6, Transistor,
+   Stellaris: Galaxy Command, and Stormbound entries. Swap between styles
+   when switching into Home Mode vs. Work Mode. Ideas to explore:
+   - Background image, with tasks and buttons rendered as glass
+     (translucent/blurred) surfaces over it.
+   - Top control buttons (Home/Work mode, hamburger) reduced to single icons,
+     no text labels.
+   - Replace emoji icons throughout with custom monochrome icons.
 
 ### Parked / long-term
 
-- Exercise tracker calendar view (the long-term half of #6 — build the
+- Exercise tracker calendar view (the long-term half of #5 — build the
   basic tracker first, calendar view later).
+- Archive viewer — a way to browse/search archived (completed) tasks in-app.
+  Not yet designed; today the archive is write-only, populated by "Archive
+  done" and only inspectable via JSON export. Needs a decision on where it
+  lives (new sheet? filter within existing category view?) before building.
 
 ## Testing (planned)
 

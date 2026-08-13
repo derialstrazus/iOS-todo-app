@@ -391,7 +391,7 @@
     <button class="menu-item" id="export-btn" role="menuitem">↓ Export backup</button>
     <button class="menu-item" id="import-btn" role="menuitem">↑ Restore backup</button>
     <div class="menu-sep"></div>
-    <button class="menu-item danger" id="clear-done-btn" role="menuitem">✕ Clear done</button>
+    <button class="menu-item" id="archive-done-btn" role="menuitem">🗄 Archive done</button>
   </div>
 
   <div class="scroll" id="scroll"></div>
@@ -497,8 +497,12 @@
   // Transient state for whatever the sheet is currently editing/creating
   let sheetCtx = null; // { mode:'create'|'edit', cat, tag, taskCat, taskIndex }
 
-  // State shape: { categories: ["Home", ...], active: "Home", tasks: { "Home": [ {text, done} ] },
+  // State shape: { categories: ["Home", ...], active: "Home",
+  //   tasks: { "Home": [ {text, done, tag, createdAt, completedAt} ] },
   //   categoryTags: { "Home": "home" | "work" } }
+  // createdAt is set once at creation. completedAt is set when done becomes true and
+  // cleared back to null if unchecked. Tasks created before this field existed simply
+  // lack it (undefined) until next touched.
   // `active` is retained for back-compat; here it's the default category for the Add box.
   // `categoryTags` is sparse: a category with no entry is untagged.
   let state = load();
@@ -511,6 +515,23 @@
   // preset — never mutates state.categories. Kept in localStorage; not part of the JSON backup.
   const MODE_KEY = "todos.v2.mode";
   let viewMode = loadViewMode();
+
+  // Archived (completed) tasks live in their own localStorage key, separate from `state`.
+  // This keeps every routine save() (checking a box, dragging a row) cheap regardless of how
+  // much history has piled up — only archiveDone()/trimArchive() touch this key. Write-only
+  // for now: no in-app viewer yet (see backlog), archive contents are only inspectable via
+  // JSON export, which includes them.
+  const ARCHIVE_KEY = "todos.v2.archive";
+  const ARCHIVE_THRESHOLD = 5000;
+  let archive = loadArchive();
+  function loadArchive() {
+    try {
+      const a = JSON.parse(localStorage.getItem(ARCHIVE_KEY));
+      if (Array.isArray(a)) return a;
+    } catch (e) {}
+    return [];
+  }
+  function saveArchive() { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive)); }
 
   function defaultState() {
     return { categories: ["Home"], active: "Home", tasks: { "Home": [] }, categoryTags: {} };
@@ -862,7 +883,11 @@
 
           const check = document.createElement("div");
           check.className = "check";
-          check.onclick = function () { tasks[i].done = !tasks[i].done; save(); render(); };
+          check.onclick = function () {
+            tasks[i].done = !tasks[i].done;
+            tasks[i].completedAt = tasks[i].done ? new Date().toISOString() : null;
+            save(); render();
+          };
 
           const label = document.createElement("div");
           label.className = "label";
@@ -1057,7 +1082,7 @@
 
     if (sheetCtx.mode === "create") {
       if (!state.tasks[cat]) state.tasks[cat] = [];
-      state.tasks[cat].push({ text: text, done: false, tag: sheetCtx.tag || null });
+      state.tasks[cat].push({ text: text, done: false, tag: sheetCtx.tag || null, createdAt: new Date().toISOString(), completedAt: null });
       state.active = cat;
       if (collapsed[cat]) { collapsed[cat] = false; saveCollapsed(); }
     } else {
@@ -1101,7 +1126,8 @@
       app: "todo",
       version: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
-      state: state
+      state: state,
+      archive: archive
     };
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -1142,6 +1168,11 @@
     reader.onload = function () {
       const parsed = parseBackup(reader.result);
       if (!parsed) { showToast("That file isn't a valid backup"); fileInput.value = ""; return; }
+      let archiveFromBackup = null;
+      try {
+        const raw = JSON.parse(reader.result);
+        if (Array.isArray(raw.archive)) archiveFromBackup = raw.archive;
+      } catch (e) {}
       let n = 0;
       parsed.categories.forEach(function (c) { n += (parsed.tasks[c] || []).length; });
       if (!confirm("Restore this backup? It replaces your current " +
@@ -1150,7 +1181,10 @@
         return;
       }
       state = parsed;
-      save(); render();
+      if (archiveFromBackup) archive = archiveFromBackup;
+      save();
+      if (archiveFromBackup) saveArchive();
+      render();
       showToast("Restored " + n + " task" + (n === 1 ? "" : "s") + " in " + parsed.categories.length + " categories");
       fileInput.value = "";
     };
@@ -1163,17 +1197,57 @@
     return n;
   }
 
-  function clearDone() {
-    // Single-page view has no active category, so clear completed across all categories.
-    let removed = 0;
+  // Moves completed tasks out of state into the archive (rather than deleting them).
+  // Single-page view has no active category, so this sweeps completed tasks across all categories.
+  function archiveDone() {
+    let archived = 0;
+    const now = new Date().toISOString();
     state.categories.forEach(function (cat) {
       const tasks = state.tasks[cat] || [];
-      const before = tasks.length;
-      state.tasks[cat] = tasks.filter(function (t) { return !t.done; });
-      removed += before - state.tasks[cat].length;
+      const remaining = [];
+      tasks.forEach(function (t) {
+        if (t.done) {
+          archive.push({
+            text: t.text,
+            tag: t.tag || null,
+            category: cat,
+            createdAt: t.createdAt || null,
+            completedAt: t.completedAt || now,
+            archivedAt: now
+          });
+          archived++;
+        } else {
+          remaining.push(t);
+        }
+      });
+      state.tasks[cat] = remaining;
     });
-    save(); render();
-    showToast(removed ? "Cleared " + removed + " completed" : "Nothing to clear");
+    save();
+    if (archived) saveArchive();
+    render();
+    showToast(archived ? "Archived " + archived + " completed task" + (archived === 1 ? "" : "s") : "Nothing to archive");
+    if (archived) checkArchiveThreshold();
+  }
+
+  // Once the archive crosses ARCHIVE_THRESHOLD, prompt to export a full backup (which
+  // includes the archive) and then trim it back down to the most recent half.
+  function checkArchiveThreshold() {
+    if (archive.length < ARCHIVE_THRESHOLD) return;
+    const keep = Math.floor(ARCHIVE_THRESHOLD / 2);
+    const doExport = confirm(
+      "Archive has grown to " + archive.length + " tasks. Export a full backup now, then trim the archive down to the most recent " + keep + "?"
+    );
+    if (!doExport) return;
+    exportJson();
+    trimArchive(keep);
+  }
+
+  function trimArchive(keep) {
+    archive.sort(function (a, b) { return (a.archivedAt || "").localeCompare(b.archivedAt || ""); });
+    const removed = archive.length - keep;
+    if (removed > 0) archive.splice(0, removed);
+    saveArchive();
+    showToast("Trimmed archive to the most recent " + archive.length + " tasks");
   }
 
   fab.onclick = function () { openCreate(); };
@@ -1221,7 +1295,7 @@
   document.getElementById("organize-cats-btn").onclick = menuAction(openCatSheet);
   document.getElementById("export-btn").onclick = menuAction(exportJson);
   document.getElementById("import-btn").onclick = menuAction(importJson);
-  document.getElementById("clear-done-btn").onclick = menuAction(clearDone);
+  document.getElementById("archive-done-btn").onclick = menuAction(archiveDone);
 
   // Organize-categories sheet controls
   catAddBtn.onclick = addFromCatSheet;
@@ -1230,6 +1304,8 @@
   catDoneBtn.onclick = closeCatSheet;
   catBackdrop.onclick = closeCatSheet;
 
+  // Catches the case where a restored backup already carries an over-threshold archive.
+  checkArchiveThreshold();
   render();
 </script>
 </body>

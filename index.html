@@ -740,9 +740,17 @@
   }
   function saveCollapsed() { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed)); }
 
+  // Guarded like the other loaders. localStorage can throw outright rather than
+  // return null — opaque origins, Safari private browsing, storage disabled. An
+  // unguarded throw here is especially bad: it leaves the `viewMode` binding
+  // uninitialised, so every later read (including render()'s) hits the temporal
+  // dead zone and throws again, blanking the whole app rather than degrading it.
   function loadViewMode() {
-    const m = localStorage.getItem(MODE_KEY);
-    return (m === "home" || m === "work") ? m : null;
+    try {
+      const m = localStorage.getItem(MODE_KEY);
+      return (m === "home" || m === "work") ? m : null;
+    } catch (e) {}
+    return null;
   }
   function saveViewMode() {
     if (viewMode) localStorage.setItem(MODE_KEY, viewMode);

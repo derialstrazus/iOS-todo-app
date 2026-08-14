@@ -1,0 +1,11 @@
+# Design exploration — mockups, reference renders, palette specs.
+# Kept locally; not part of the deployed app.
+design/
+
+# Local dev tooling (preview server config)
+.claude/
+
+# OS / OneDrive cruft
+.DS_Store
+Thumbs.db
+desktop.ini

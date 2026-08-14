@@ -49,7 +49,7 @@ Delivered and in active use:
 - Floating action button (FAB) opening a bottom sheet for task creation
   (category chip picker, task name, optional tag).
 - Edit-via-tap reusing the same sheet, with Delete.
-- Tag icons on task rows (❗ ⌛ ⚡ with colored backgrounds).
+- Tag badges on task rows (PRIO / HOLD / QUICK, dog-eared corner).
 - Hamburger menu consolidating Export, Restore, Archive done, and Organize
   categories.
 - Organize-categories sheet: inline rename, drag-to-reorder, delete with
@@ -83,6 +83,23 @@ Delivered and in active use:
   Write-only in the UI for now; no in-app way to browse it yet (see backlog).
   At ~5000 archived tasks, prompts to export a backup and trims the archive
   down to the most recent 2500.
+- Styling refresh, in the visual language of Deus Ex: Human Revolution.
+  Warm gold on near-black, with a god-ray wash and 45° hatch on task rows.
+  The signature shape is an **opposing 45° notch** (top-right and bottom-left,
+  equal offset on both axes) carried only by things you *press* — the three
+  top buttons and the FAB. Task rows are square. Two mechanical rules follow
+  from `clip-path`: notched elements can't use a CSS border (it's cut away on
+  the diagonals, so they use a lighter fill instead), and they must use
+  `filter: drop-shadow()` rather than `box-shadow`, which is also clipped.
+  Category bars sit *lighter* than the ground, not darker — the list scrolls,
+  so contrast can't depend on where a bar lands against the gradient. Emoji
+  are gone; all icons are inline SVG. Full spec and the rejected alternatives
+  live in `design/` (git-ignored, local only).
+- Home / Work colour palettes: `data-mode="work"` on `<html>`, stamped from
+  `viewMode` in `render()`, swaps the whole token set from warm gold to cold
+  steel. Home *and* cleared-mode both fall back to the gold on `:root`, so
+  those two states look identical apart from the active tab. `theme-color`
+  tracks the mode so the iOS status bar follows.
 
 ## Backlog (build individually, in priority order)
 
@@ -102,17 +119,13 @@ Delivered and in active use:
 5. **Exercise tracker** — archiving now exists, so this is unblocked. Track
    past exercises; long-term, show a GitHub-contributions-style calendar
    checklist of exercise history.
-6. **Styling update** — sleek "steel and glass" visual refresh. Reference:
-   [gameuidatabase.com](https://www.gameuidatabase.com/), specifically the
-   Endless Space 2, Starfield, Final Fantasy XV, Metal Gear Solid V: The
-   Phantom Pain, Deus Ex: Human Revolution, Armored Core 6, Transistor,
-   Stellaris: Galaxy Command, and Stormbound entries. Swap between styles
-   when switching into Home Mode vs. Work Mode. Ideas to explore:
-   - Background image, with tasks and buttons rendered as glass
-     (translucent/blurred) surfaces over it.
-   - Top control buttons (Home/Work mode, hamburger) reduced to single icons,
-     no text labels.
-   - Replace emoji icons throughout with custom monochrome icons.
+6. **Restyle the bottom sheets** — the create/edit sheet and the Organize
+   Categories sheet were rethemed to the new palette when the styling refresh
+   landed, but they keep their original rounded, iOS-style geometry (18px
+   corners, pill chips, circular controls). Against the angular main screen
+   they now read as a different design language. Bring them onto the same
+   vocabulary: square corners, 45° notches on the action buttons, and the
+   filled-bar treatment for field labels.
 
 ### Parked / long-term
 

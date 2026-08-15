@@ -63,18 +63,38 @@ Delivered and in active use:
 - Add-task shortcut per category: a soft-tinted blue "+" circle on each
   category header (replacing the task count) opens the creation sheet with
   Category hidden/locked to that category.
-- Category tags: categories can be tagged "Home" or "Work" (cycled via a
-  badge in the Organize Categories sheet) and show as a coloured left tick
-  and caret on the main-screen category bar. The two hues are gold and steel
-  — the same pair the modes use — held as **fixed** values that are
-  deliberately *not* remapped under `[data-mode]`, so a Home-tagged category
-  reads gold and a Work-tagged one steel whichever mode is active. Untagged
-  categories fall through to the current mode's accent.
+- Category tags: **every category is either Home or Work** — there is no
+  untagged state. Toggled two-way via a badge in the Organize Categories
+  sheet, and shown as a coloured left tick and caret on the main-screen
+  category bar. The two hues are gold and steel — the same pair the modes use
+  — held as **fixed** values that are deliberately *not* remapped under
+  `[data-mode]`, so a Home-tagged category reads gold and a Work-tagged one
+  steel whichever mode is active.
+
+  `state.categoryTags` can still be sparse (categories predating tagging, or
+  old backups), so **all reads go through `tagOf(cat)`, which resolves a
+  missing entry to `"work"`** — never read the map directly. That fallback is
+  what keeps legacy categories reachable: the mode filter hides everything
+  outside the active mode, so a genuinely untagged category would appear
+  nowhere. New categories are written as `"work"` explicitly, so the tag shows
+  up in an export rather than relying on the fallback.
 - Work Mode / Home Mode toggle, replacing Show All / Collapse All at the top:
-  selecting a mode moves matching-tag categories to the top and expands them,
-  collapses opposite-tag categories, and leaves untagged categories untouched.
-  Tapping the active mode again clears it. Display-only sort — never mutates
-  the saved category order.
+  **Work sits first and is the launch default** (`loadViewMode()` returns
+  `"work"` when nothing is saved; a returning user gets the mode they left in).
+  Selecting a mode **filters** — only that mode's categories are on screen,
+  in saved order — and expands them on the way in, so the list you asked for
+  is open when you arrive.
+
+  The mode is always `"home"` or `"work"`; there is no cleared state, because
+  with a filter it would render an empty screen. Tapping the mode you're
+  already in is therefore a no-op, which also stops a stray tap undoing
+  whatever you'd collapsed by hand. Display-only — never mutates the saved
+  category order. When the active mode holds no categories the list shows a
+  "Nothing in Home/Work" prompt rather than a blank screen.
+
+  The creation sheet's category picker deliberately still lists **all**
+  categories, so you can file a Home task without leaving Work mode. The task
+  then won't be visible until you switch — accepted for now.
 - Timestamps: `createdAt` set once at task creation; `completedAt` set when a
   task is checked done and cleared back to `null` if unchecked. Tasks created
   before this shipped simply lack the fields until next touched.
@@ -101,15 +121,22 @@ Delivered and in active use:
   live in `design/` (git-ignored, local only).
 - Home / Work colour palettes: `data-mode="work"` on `<html>`, stamped from
   `viewMode` in `render()`, swaps the whole token set from warm gold to cold
-  steel. Home *and* cleared-mode both fall back to the gold on `:root`, so
-  those two states look identical apart from the active tab. `theme-color`
-  tracks the mode so the iOS status bar follows.
+  steel; Home falls back to the gold on `:root`. `theme-color` tracks the mode
+  so the iOS status bar follows.
 - Sheets, menu and toast on the same vocabulary as the main screen: square
   corners throughout, action buttons carrying the 45° notch, and field labels
   rendered as filled tabs (the category-bar treatment — gold left tick,
   rounded right cap, `inline-flex` so the bar hugs its text). Organize rows
   reuse the hatched task-row slab. `.sheet-btn.danger` is text-only and so
   sets `clip-path: none` — a notch needs a fill to cut.
+- Task sheet action row: no Cancel button — the backdrop tap is the only
+  dismissal. Delete sits left at 1/3, Save right at 2/3, via
+  `#sheet-delete { flex: 1 }` / `#sheet-save { flex: 2 }`, scoped by id so
+  `.cat-add-btn`'s own flex isn't disturbed. Delete stays hidden when
+  creating, so Save spans the full row there.
+- The "Pending" tag reads **Wait** — `label: "Wait"`, badge `short: "WAIT"`
+  (uppercase to match PRIO/QUICK). The stored tag id is still `pending`, so
+  existing tasks and old JSON backups need no migration.
 
 ## Backlog (build individually, in priority order)
 
@@ -133,15 +160,58 @@ Delivered and in active use:
    "New category nam" — it shares a row with the Add button and gets too
    narrow. Pre-dates the sheet restyle. Either shorten the placeholder or
    move Add onto its own row.
+7. **Archive categories** — categories stand in for work projects; when a
+   project finishes the category should come off the main view, but projects
+   come back to life, so this is archive-and-restore, not delete. Restore
+   lives in the Organize Categories sheet.
+
+   **A category can only be archived once it has no unfinished tasks.** That
+   rule is what keeps the design small — there is no task payload to move, so
+   no second store is needed. Archive is: refuse if any task is undone; sweep
+   the remaining (all completed) tasks into `todos.v2.archive` via the same
+   path as "Archive done"; then set a flag. Restore clears the flag.
+
+   Shape decided: a sparse `categoryArchived: { "Project X": true }` map
+   inside `state`, alongside `categoryTags`. The category never leaves
+   `state.categories`, which buys three things for free — export/restore
+   works untouched (`exportJson` serializes `state` wholesale), the existing
+   `addCategory` duplicate check already blocks reusing an archived name, and
+   restoring puts the category back at its original position in the order.
+
+   The real cost is that every iteration over `state.categories` has to skip
+   archived entries — render, mode ordering, the creation sheet's chip
+   picker, the per-category add shortcut. Miss one and an archived category
+   surfaces somewhere unexpected.
+
+   Still to handle when building: the duplicate-name message ("Category
+   already exists") is confusing for a name you can't see, so it needs to say
+   the category is archived; archiving wants the same "keep at least one
+   category" guard `deleteCategory` has; and archived categories need a
+   section in the Organize Categories sheet to restore from, with rename
+   presumably disabled there (see #8).
+8. **Archive loses track of renamed categories** — `renameCategory` remaps
+   `state.tasks` and `categoryTags` but never touches `todos.v2.archive`, so
+   archived tasks keep the category name they had when archived. Rename a
+   category and its history splits into two groups under the old and new
+   names. Harmless while the archive is write-only; breaks the
+   grouped-by-category archive viewer, and the drift compounds the longer it
+   goes unfixed. Fix: backfill matching `category` fields in the archive on
+   rename. Related: once #7 lands, an archived category's whole history is
+   keyed by its name, so renaming one from the Organize sheet should either
+   carry the archive with it or be disabled outright.
 
 ### Parked / long-term
 
 - Exercise tracker calendar view (the long-term half of #5 — build the
   basic tracker first, calendar view later).
-- Archive viewer — a way to browse/search archived (completed) tasks in-app.
-  Not yet designed; today the archive is write-only, populated by "Archive
-  done" and only inspectable via JSON export. Needs a decision on where it
-  lives (new sheet? filter within existing category view?) before building.
+- Archive viewer — a way to browse/search archived (completed) tasks in-app,
+  **grouped by category and sorted by date**. The data is already there: every
+  entry `archiveDone()` writes carries `category`, `createdAt`, `completedAt`
+  and `archivedAt`, so no model change is needed — but see #8, renames
+  currently fracture a category's history into two groups. Today the archive
+  is write-only, populated by "Archive done" and only inspectable via JSON
+  export. Still needs a decision on where the viewer lives (new sheet? filter
+  within the existing category view?) before building.
 
 ## Testing (planned)
 

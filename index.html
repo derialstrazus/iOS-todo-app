@@ -369,6 +369,10 @@
     flex: 0 0 auto; padding: 15px 16px;
     clip-path: none;
   }
+  /* Task sheet action row: Delete left, Save right at two thirds. Scoped by id
+     so .cat-add-btn's own flex isn't disturbed. */
+  #sheet-delete { flex: 1; }
+  #sheet-save { flex: 2; }
 
   /* Hamburger dropdown menu */
   .menu-btn { margin-left: auto; }
@@ -577,11 +581,11 @@
 </head>
 <body>
   <div class="controls">
-    <button class="ctrl mode-btn mode-home" id="home-mode-btn" aria-label="Home mode" aria-pressed="false">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7v9h-6v-6h-6v6H3z"/></svg>
-    </button>
     <button class="ctrl mode-btn mode-work" id="work-mode-btn" aria-label="Work mode" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13"/><path d="M9 7V4h6v3"/><path d="M3 12h18"/></svg>
+    </button>
+    <button class="ctrl mode-btn mode-home" id="home-mode-btn" aria-label="Home mode" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7v9h-6v-6h-6v6H3z"/></svg>
     </button>
     <button class="ctrl menu-btn" id="menu-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -628,10 +632,11 @@
       <div class="chips" id="sheet-tags"></div>
     </div>
 
+    <!-- No Cancel: the backdrop tap dismisses. Delete only appears when editing,
+         so Save spans the whole row when creating. -->
     <div class="sheet-actions">
-      <button class="sheet-btn primary" id="sheet-save" disabled>Add task</button>
-      <button class="sheet-btn secondary" id="sheet-cancel">Cancel</button>
       <button class="sheet-btn danger" id="sheet-delete" style="display:none;">Delete</button>
+      <button class="sheet-btn primary" id="sheet-save" disabled>Add task</button>
     </div>
   </div>
 
@@ -674,7 +679,6 @@
   const sheetCats = document.getElementById("sheet-cats");
   const sheetTags = document.getElementById("sheet-tags");
   const sheetSave = document.getElementById("sheet-save");
-  const sheetCancel = document.getElementById("sheet-cancel");
   const sheetDelete = document.getElementById("sheet-delete");
 
   // Organize-categories sheet
@@ -689,7 +693,7 @@
   // `label` is the full name used in the picker and for accessibility.
   const TAGS = [
     { id: "priority", label: "Priority", short: "PRIO" },
-    { id: "pending", label: "Pending", short: "HOLD" },
+    { id: "pending", label: "Wait", short: "WAIT" },
     { id: "quick", label: "Quick", short: "QUICK" }
   ];
   function tagById(id) {
@@ -698,13 +702,18 @@
     return null;
   }
 
-  // Category tags: "home" | "work" | null (untagged). Cycled via a badge in the organize sheet
-  // and shown as a colored accent bar on the main-screen category section.
-  function catTagGlyph(tag) {
-    if (tag === "home") return "H";
-    if (tag === "work") return "W";
-    return "·";
+  // Category tags: every category is either "home" or "work" — there is no untagged
+  // state. Toggled via a badge in the organize sheet, and shown as a colored accent
+  // bar on the main-screen category section.
+  //
+  // `categoryTags` can still be sparse: categories created before tagging existed have
+  // no entry, and so does anything restored from an old backup. Reading a missing entry
+  // as "work" is what keeps those reachable — the mode filter hides everything that
+  // isn't the active mode, so a genuinely untagged category would show up nowhere.
+  function tagOf(cat) {
+    return state.categoryTags[cat] === "home" ? "home" : "work";
   }
+  function catTagGlyph(tag) { return tag === "home" ? "H" : "W"; }
 
   // Transient state for whatever the sheet is currently editing/creating
   let sheetCtx = null; // { mode:'create'|'edit', cat, tag, taskCat, taskIndex }
@@ -716,15 +725,17 @@
   // cleared back to null if unchecked. Tasks created before this field existed simply
   // lack it (undefined) until next touched.
   // `active` is retained for back-compat; here it's the default category for the Add box.
-  // `categoryTags` is sparse: a category with no entry is untagged.
+  // `categoryTags` may be sparse; read it through tagOf(), never directly.
   let state = load();
 
   // Per-category collapsed state, keyed by category name. Kept in localStorage; not part of the JSON backup.
   const COLLAPSE_KEY = "todos.v2.collapsed";
   let collapsed = loadCollapsed();
 
-  // Work Mode / Home Mode: "home" | "work" | null. Purely a render-time sort + collapse
-  // preset — never mutates state.categories. Kept in localStorage; not part of the JSON backup.
+  // Work Mode / Home Mode: "home" | "work". Always one or the other — the mode filters
+  // the list, so there is no "no mode" state to fall back to (it would render an empty
+  // screen). Purely a render-time filter + collapse preset; never mutates
+  // state.categories. Kept in localStorage; not part of the JSON backup.
   const MODE_KEY = "todos.v2.mode";
   let viewMode = loadViewMode();
 
@@ -781,46 +792,36 @@
   // unguarded throw here is especially bad: it leaves the `viewMode` binding
   // uninitialised, so every later read (including render()'s) hits the temporal
   // dead zone and throws again, blanking the whole app rather than degrading it.
+  // Work is the default on a first launch; a returning user gets the mode they left in.
   function loadViewMode() {
     try {
       const m = localStorage.getItem(MODE_KEY);
-      return (m === "home" || m === "work") ? m : null;
+      if (m === "home" || m === "work") return m;
     } catch (e) {}
-    return null;
+    return "work";
   }
   function saveViewMode() {
-    if (viewMode) localStorage.setItem(MODE_KEY, viewMode);
-    else localStorage.removeItem(MODE_KEY);
+    try { localStorage.setItem(MODE_KEY, viewMode); } catch (e) {}
   }
 
-  // Selecting a mode expands categories tagged with it and collapses categories tagged with
-  // the opposite; untagged categories are left as-is. Tapping the active mode again clears it
-  // and expands everything. Category order itself is never mutated (see displayCategories()).
+  // Switching mode expands everything in the mode you're switching to, so the list you
+  // asked for is open when you get there. Tapping the mode you're already in is a no-op
+  // rather than a clear — clearing would leave nothing to show, and a stray tap would
+  // otherwise undo whatever you'd collapsed by hand. Category order is never mutated.
   function setViewMode(next) {
-    if (viewMode === next) {
-      viewMode = null;
-      state.categories.forEach(function (c) { collapsed[c] = false; });
-    } else {
-      viewMode = next;
-      const opposite = next === "home" ? "work" : "home";
-      state.categories.forEach(function (c) {
-        const tag = state.categoryTags[c];
-        if (tag === next) collapsed[c] = false;
-        else if (tag === opposite) collapsed[c] = true;
-      });
-    }
+    if (viewMode === next) return;
+    viewMode = next;
+    state.categories.forEach(function (c) {
+      if (tagOf(c) === next) collapsed[c] = false;
+    });
     saveViewMode();
     saveCollapsed();
     render();
   }
 
+  // The mode is a filter: only its own categories are on screen, in saved order.
   function displayCategories() {
-    if (!viewMode) return state.categories.slice();
-    const matched = [], rest = [];
-    state.categories.forEach(function (c) {
-      (state.categoryTags[c] === viewMode ? matched : rest).push(c);
-    });
-    return matched.concat(rest);
+    return state.categories.filter(function (c) { return tagOf(c) === viewMode; });
   }
 
   let toastTimer;
@@ -839,6 +840,9 @@
     if (state.categories.indexOf(name) !== -1) return "Category already exists";
     state.categories.push(name);
     state.tasks[name] = [];
+    // New categories are Work by default. Written explicitly rather than left to tagOf()'s
+    // fallback so the tag is visible in an export.
+    state.categoryTags[name] = "work";
     save();
     return true;
   }
@@ -873,11 +877,9 @@
     return true;
   }
 
-  // Cycle a category's tag: none -> home -> work -> none
-  function cycleCategoryTag(cat) {
-    const current = state.categoryTags[cat] || null;
-    const next = !current ? "home" : current === "home" ? "work" : null;
-    if (next) state.categoryTags[cat] = next; else delete state.categoryTags[cat];
+  // Home <-> Work. Two-way: there is no untagged state to cycle through.
+  function toggleCategoryTag(cat) {
+    state.categoryTags[cat] = tagOf(cat) === "home" ? "work" : "home";
     save();
   }
 
@@ -933,12 +935,12 @@
         if (e.key === "Enter") { e.preventDefault(); nameInput.blur(); }
       });
 
-      const curTag = state.categoryTags[cat] || null;
+      const curTag = tagOf(cat);
       const tagBtn = document.createElement("button");
-      tagBtn.className = "cat-tag-btn" + (curTag ? " tag-" + curTag : "");
+      tagBtn.className = "cat-tag-btn tag-" + curTag;
       tagBtn.textContent = catTagGlyph(curTag);
-      tagBtn.setAttribute("aria-label", "Category tag: " + (curTag || "none") + ", tap to change");
-      tagBtn.onclick = function () { cycleCategoryTag(cat); renderCatList(); };
+      tagBtn.setAttribute("aria-label", "Category tag: " + curTag + ", tap to switch");
+      tagBtn.onclick = function () { toggleCategoryTag(cat); renderCatList(); };
 
       const del = document.createElement("button");
       del.className = "cat-del";
@@ -1050,13 +1052,24 @@
       return;
     }
 
-    displayCategories().forEach(function (cat) {
+    const shown = displayCategories();
+    // Every category can legitimately sit in the other mode, and the filter hides them,
+    // so say why the screen is blank rather than showing nothing at all.
+    if (shown.length === 0) {
+      const p = document.createElement("div");
+      p.className = "empty-all";
+      p.innerHTML = "Nothing in " + (viewMode === "home" ? "Home" : "Work") +
+        ".<br>Move a category over in Organize categories.";
+      scroll.appendChild(p);
+      return;
+    }
+
+    shown.forEach(function (cat) {
       const tasks = state.tasks[cat] || [];
       const isCollapsed = !!collapsed[cat];
 
       const section = document.createElement("div");
-      const catTag = state.categoryTags[cat] || null;
-      section.className = "section" + (isCollapsed ? " collapsed" : "") + (catTag ? " tag-" + catTag : "");
+      section.className = "section" + (isCollapsed ? " collapsed" : "") + " tag-" + tagOf(cat);
 
       // Header: tap to toggle collapse (category management lives in the organize sheet)
       const head = document.createElement("div");
@@ -1476,7 +1489,6 @@
 
   fab.onclick = function () { openCreate(); };
   sheetSave.onclick = saveSheet;
-  sheetCancel.onclick = closeSheet;
   sheetDelete.onclick = deleteFromSheet;
   sheetBackdrop.onclick = closeSheet;
   sheetText.addEventListener("input", updateSaveEnabled);

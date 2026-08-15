@@ -203,6 +203,100 @@ Delivered and in active use:
   per row. No more inline rename inputs, drag-to-reorder, or an add-new-
   category row; `renderCatList()` shows "No archived categories." when empty.
 
+## Future screens (long-term plan)
+
+Three additional screens will eventually live at the same layer as the mode
+switching: an **Archive viewer**, an **Exercise mode** (GitHub-contributions
+calendar + performance metrics, then a menu of exercise plans — running,
+yoga, weightlifting — each with long-term goals and a current workout plan,
+e.g. a lifting cycle of Arms/Back/Chest/Legs with per-group progression),
+and a **Financials tracker** (morning review of weekly spend vs. budget,
+fed by a side project that auto-categorizes transactions, with manual
+categorization for the rest). Exercise and Financials details are still to
+be talked through; this section records the architectural decisions made so
+the app can grow into them without rework.
+
+### Navigation: "mode" is promoted to "screen"
+
+Home/Work today is a two-value *filter* over one screen. The new screens are
+not filters — they're different renderers over different data. The agreed
+shape is two-level:
+
+- **`screen`** ∈ `todos` | `archive` | `exercise` | `finance` — which
+  renderer owns the scroll area.
+- **`viewMode`** ∈ `home` | `work` — stays exactly as it is, but scoped as a
+  sub-state of the todos screen (and plausibly reusable as a filter inside
+  the Archive viewer, since archived tasks carry categories that carry
+  tags). The "always home or work, never cleared" rule is unchanged.
+
+`render()` becomes a dispatcher over a screen registry
+(`{ id, icon, render, palette }`); the top bar renders its buttons from
+that registry. Adding a screen later is then additive. The refactor can be
+done with only the todos screen registered — that's the point. Top bar goes
+from 3 buttons to ~6 (Work, Home, Archive, Exercise, Finance, menu) —
+icon-only at iPhone width is tight; check on the real device before
+committing all five to the bar.
+
+Theming already cooperates: each screen can stamp its own `data-mode` and
+get its own token palette. The fixed Home/Work category-tick colours stay
+fixed by design.
+
+### Storage and backup
+
+- One localStorage key per domain, as today: `todos.v2`, `todos.v2.archive`,
+  later `exercise.v1`, `finance.v1`. Rationale unchanged from the archive
+  split: checking a todo checkbox must never re-serialize workout history.
+  iOS Safari's ~5MB quota is the ceiling; finance stores a bounded snapshot
+  (current week + a few weeks), not an ever-growing ledger.
+- **Backup envelope goes multi-domain** (do this *before* any new domain
+  ships): optional top-level sections — `state`/`archive` today,
+  `exercise`, `finance` later. Old backups stay valid. Restore becomes
+  **section-scoped**: only domains present in the file are replaced.
+  Otherwise, restoring a pre-exercise backup would silently wipe workout
+  history — a data-loss bug designed out before it can exist.
+
+### Per-screen notes
+
+- **Archive viewer:** the where-does-it-live question is answered — its own
+  screen. No model change needed. Sanity-check rendering ~5000 entries on
+  an iPhone (grouped, collapsed by default, same trick as the main screen).
+- **Exercise:** its own store, *not* derived from the todo archive — plans,
+  goals, cycle position and dated workout records don't belong in archived
+  todos. Todos can link to it later if wanted.
+- **Financials:** external data, but within the no-backend constraint —
+  *read-only pull is not sync*. Fetch on launch/screen-open when online,
+  cache the latest snapshot in localStorage with an `asOf` timestamp,
+  render the cached snapshot with a staleness note offline (the
+  morning-train review must work without signal). Requirements on the side
+  project: **HTTPS** endpoint (the PWA is on GitHub Pages over HTTPS, so
+  HTTP is blocked as mixed content), **CORS** headers allowing the Pages
+  origin, and — the one thing expensive to retrofit — **stable, unique
+  transaction IDs**, because manual category corrections live in a local
+  map keyed by transaction ID, overlaid on whatever the API returns, and
+  must survive re-fetches. Email push can't be automated (a PWA can't read
+  mail); paste-a-JSON-blob import is the fallback, not the primary.
+  Corrections flowing *back* to the side project would be two-way sync —
+  deferred; the app's overlay is authoritative for display.
+
+### Single-file pressure
+
+Three screens plus recurring tasks could push the file past 5,000 lines.
+Decision: **stay single-file** with strict internal layout — one
+clearly-fenced section per domain (state + renderer + handlers). Splitting
+would cost offline robustness (no service worker; every extra file is
+another HTTP-cache miss on a train). Revisit only if it becomes painful,
+together with the open `todo.js` extraction question under Testing.
+
+### Sequencing
+
+Only two things must precede the screens: the multi-domain backup envelope
+and the nav/dispatcher refactor. Both are small standalone passes and don't
+conflict with backlog #1 (recurring tasks) or #2 (comments). Archive viewer
+is the natural first screen — pure UI over existing data, exercising the
+new nav with zero model risk. Decisions still owed before building: whether
+all five nav entries fit the top bar on the real phone, exercise's data
+model, and API-vs-email for the side project.
+
 ## Backlog (build individually, in priority order)
 
 1. **Recurring tasks** — on app launch, check the recurring-tasks list and add
@@ -220,9 +314,8 @@ Delivered and in active use:
       triggered from inside the create/edit or Organize Categories sheet
       (e.g. the "keep at least one category" guard) renders behind it.
       Found while building category archiving.
-4. **Exercise tracker** — archiving now exists, so this is unblocked. Track
-   past exercises; long-term, show a GitHub-contributions-style calendar
-   checklist of exercise history.
+4. **Exercise tracker** — now planned as a full Exercise screen; see Future
+   screens. Gets its own store rather than deriving from the todo archive.
 5. **Archive viewer** — a way to browse/search archived (completed) tasks
    in-app, **grouped by category and sorted by date**. The data is already
    there: every entry `archiveDone()`/`archiveCategory()` writes carries
@@ -230,8 +323,8 @@ Delivered and in active use:
    change is needed, and category renames no longer fracture a category's
    history (see Current state). Today the archive is write-only, populated
    by "Archive done" and "Archive category," and only inspectable via JSON
-   export. Still needs a decision on where the viewer lives (new sheet?
-   filter within the existing category view?) before building.
+   export. Where it lives is decided — its own screen at the nav layer (see
+   Future screens); build after the nav/dispatcher refactor.
 
 ## Testing (planned)
 

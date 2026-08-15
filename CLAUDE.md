@@ -207,6 +207,20 @@ further down). When in doubt, the code wins:
   the replacement element, so the tag tap is dropped with no error. Leaving
   the existing chip elements alone and reading state fresh at click time
   sidesteps the whole race.
+- Multi-domain backup envelope (the second Future-screens prerequisite):
+  export/restore runs off a `BACKUP_DOMAINS` registry — per domain,
+  `current` feeds the export payload, `normalize` validates an incoming
+  section (null = invalid), `apply` swaps it in and persists, `describe`
+  writes the confirm-prompt line. Sections are optional top-level envelope
+  keys (`state` + `archive` today); **restore is section-scoped** — only
+  domains present in the file are replaced, so a todo-only backup can never
+  wipe a future domain's data. A present-but-malformed section rejects the
+  whole file rather than being silently dropped (stricter than before, by
+  design). Bare-state files (no envelope) still restore; a file holding
+  only sections this version doesn't know is rejected as having nothing to
+  restore. `BACKUP_VERSION` stays 1 — it marks the shape of existing
+  sections, and adding a new optional section is deliberately not a bump.
+  Adding a domain = one registry entry.
 - Screen layer (the nav/dispatcher refactor from Future screens): `render()`
   is now a dispatcher over a `SCREENS` registry — each entry owns the scroll
   area's renderer, its palette (a `data-mode` value or `null` for the `:root`
@@ -312,9 +326,8 @@ together with the open `todo.js` extraction question under Testing.
 ### Sequencing
 
 Only two things must precede the screens: the multi-domain backup envelope
-and the nav/dispatcher refactor (**done** — see the screen-layer bullet in
-Current state). Both are small standalone passes and don't
-conflict with backlog #1 (recurring tasks) or #2 (comments). Archive viewer
+(**done**) and the nav/dispatcher refactor (**done**) — see their bullets
+in Current state. The screens are now unblocked. Archive viewer
 is the natural first screen — pure UI over existing data, exercising the
 new nav with zero model risk. Decisions still owed before building: whether
 all five nav entries fit the top bar on the real phone, exercise's data

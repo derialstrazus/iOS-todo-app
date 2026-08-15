@@ -1595,18 +1595,57 @@
     render();
   }
 
-  // ---- JSON backup / restore (full-fidelity: categories, tasks, tags, and any future fields) ----
+  // ---- JSON backup / restore ----
+  // The envelope is multi-domain: one optional top-level section per data
+  // domain — `state` + `archive` today; exercise / finance will add their own
+  // (see CLAUDE.md "Future screens"). Restore is section-scoped: only domains
+  // present in the file are replaced, so restoring an old todo-only backup can
+  // never wipe another domain's data. A section that is present but malformed
+  // rejects the whole file rather than being silently dropped. BACKUP_VERSION
+  // marks the shape of existing sections; adding a new optional section is
+  // deliberately not a version bump.
   const BACKUP_VERSION = 1;
 
-  function exportJson() {
+  // One entry per domain: `current` feeds the export payload, `normalize`
+  // validates/repairs an incoming section (null = invalid), `apply` swaps it
+  // in and persists it, `describe` summarizes the replacement for the
+  // restore-confirm prompt.
+  const BACKUP_DOMAINS = [
+    {
+      key: "state",
+      current: function () { return state; },
+      normalize: normalizeState,
+      apply: function (st) { state = st; save(); },
+      describe: function (st) {
+        let n = 0;
+        st.categories.forEach(function (c) { n += (st.tasks[c] || []).length; });
+        return "tasks: " + countAllTasks() + " → " + n +
+          " (in " + st.categories.length + " categories)";
+      }
+    },
+    {
+      key: "archive",
+      current: function () { return archive; },
+      normalize: function (a) { return Array.isArray(a) ? a : null; },
+      apply: function (a) { archive = a; saveArchive(); },
+      describe: function (a) {
+        return "archived history: " + archive.length + " → " + a.length + " entries";
+      }
+    }
+  ];
+
+  function buildBackupPayload() {
     const payload = {
       app: "todo",
       version: BACKUP_VERSION,
-      exportedAt: new Date().toISOString(),
-      state: state,
-      archive: archive
+      exportedAt: new Date().toISOString()
     };
-    const json = JSON.stringify(payload, null, 2);
+    BACKUP_DOMAINS.forEach(function (d) { payload[d.key] = d.current(); });
+    return payload;
+  }
+
+  function exportJson() {
+    const json = JSON.stringify(buildBackupPayload(), null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const d = new Date();
@@ -1620,11 +1659,8 @@
     showToast("Exported backup \u2014 save it somewhere safe");
   }
 
-  // Accepts either a full backup envelope { state: {...} } or a bare state object.
-  function parseBackup(text) {
-    let data;
-    try { data = JSON.parse(text); } catch (e) { return null; }
-    const st = data && data.state ? data.state : data;
+  // Validates/repairs an incoming `state` section. Null means invalid.
+  function normalizeState(st) {
     if (!st || !Array.isArray(st.categories) || typeof st.tasks !== "object" || !st.tasks) return null;
     // sanity-check that every category has a task array
     for (let i = 0; i < st.categories.length; i++) {
@@ -1638,33 +1674,45 @@
     return st;
   }
 
+  // Returns the restorable sections as [{ domain, value }], or null if the
+  // file is invalid or holds nothing this version knows how to restore.
+  // Accepts the envelope, or (back-compat) a bare state object as the file.
+  function parseBackup(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (e) { return null; }
+    if (!data || typeof data !== "object") return null;
+    if (data.state === undefined && Array.isArray(data.categories)) data = { state: data };
+    const sections = [];
+    for (let i = 0; i < BACKUP_DOMAINS.length; i++) {
+      const d = BACKUP_DOMAINS[i];
+      if (data[d.key] === undefined || data[d.key] === null) continue;
+      const val = d.normalize(data[d.key]);
+      if (val === null) return null; // present but malformed: reject the file
+      sections.push({ domain: d, value: val });
+    }
+    if (sections.length === 0) return null;
+    return sections;
+  }
+
+  function applyBackup(sections) {
+    sections.forEach(function (s) { s.domain.apply(s.value); });
+  }
+
   function importJson() { fileInput.click(); }
   fileInput.addEventListener("change", function (e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function () {
-      const parsed = parseBackup(reader.result);
-      if (!parsed) { showToast("That file isn't a valid backup"); fileInput.value = ""; return; }
-      let archiveFromBackup = null;
-      try {
-        const raw = JSON.parse(reader.result);
-        if (Array.isArray(raw.archive)) archiveFromBackup = raw.archive;
-      } catch (e) {}
-      let n = 0;
-      parsed.categories.forEach(function (c) { n += (parsed.tasks[c] || []).length; });
-      if (!confirm("Restore this backup? It replaces your current " +
-          countAllTasks() + " task(s) with " + n + " task(s).")) {
-        fileInput.value = "";
-        return;
-      }
-      state = parsed;
-      if (archiveFromBackup) archive = archiveFromBackup;
-      save();
-      if (archiveFromBackup) saveArchive();
-      render();
-      showToast("Restored " + n + " task" + (n === 1 ? "" : "s") + " in " + parsed.categories.length + " categories");
+      const sections = parseBackup(reader.result);
       fileInput.value = "";
+      if (!sections) { showToast("That file isn't a valid backup"); return; }
+      const lines = sections.map(function (s) { return "• " + s.domain.describe(s.value); });
+      if (!confirm("Restore this backup? It replaces:\n" + lines.join("\n") +
+          "\nAnything not in the file is left untouched.")) return;
+      applyBackup(sections);
+      render();
+      showToast("Backup restored");
     };
     reader.readAsText(file);
   });

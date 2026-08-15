@@ -205,16 +205,11 @@ Delivered and in active use:
 
 ## Backlog (build individually, in priority order)
 
-1. **Reorganize categories on the home page** — reorder categories directly
-   in the main single-page view (drag-to-reorder in place), rather than only
-   via the separate Organize Categories sheet. Partially covered by the
-   category edit sheet's Up/Down/Top buttons (tap the bar, no separate sheet
-   needed) — true drag-in-place is still open if that's still wanted.
-2. **Recurring tasks** — on app launch, check the recurring-tasks list and add
+1. **Recurring tasks** — on app launch, check the recurring-tasks list and add
    any that are due; track each recurring task's last-added date in
    localStorage to determine when it's due again.
-3. **Comments on tasks** — shown as italics on the main page.
-4. **Bug fixes:**
+2. **Comments on tasks** — shown as italics on the main page.
+3. **Bug fixes:**
    1. iPhone: extra gap at the bottom of the screen, below the last row.
       Repro: happens after double-tapping the page.
    2. iPhone: keyboard sometimes doesn't dismiss after a task is saved.
@@ -225,23 +220,18 @@ Delivered and in active use:
       triggered from inside the create/edit or Organize Categories sheet
       (e.g. the "keep at least one category" guard) renders behind it.
       Found while building category archiving.
-5. **Exercise tracker** — archiving now exists, so this is unblocked. Track
+4. **Exercise tracker** — archiving now exists, so this is unblocked. Track
    past exercises; long-term, show a GitHub-contributions-style calendar
    checklist of exercise history.
-
-### Parked / long-term
-
-- Exercise tracker calendar view (the long-term half of #5 — build the
-  basic tracker first, calendar view later).
-- Archive viewer — a way to browse/search archived (completed) tasks in-app,
-  **grouped by category and sorted by date**. The data is already there: every
-  entry `archiveDone()`/`archiveCategory()` writes carries `category`,
-  `createdAt`, `completedAt` and `archivedAt`, so no model change is needed,
-  and category renames no longer fracture a category's history (see Current
-  state). Today the archive is write-only, populated by "Archive done" and
-  "Archive category," and only inspectable via JSON export. Still needs a
-  decision on where the viewer lives (new sheet? filter within the existing
-  category view?) before building.
+5. **Archive viewer** — a way to browse/search archived (completed) tasks
+   in-app, **grouped by category and sorted by date**. The data is already
+   there: every entry `archiveDone()`/`archiveCategory()` writes carries
+   `category`, `createdAt`, `completedAt` and `archivedAt`, so no model
+   change is needed, and category renames no longer fracture a category's
+   history (see Current state). Today the archive is write-only, populated
+   by "Archive done" and "Archive category," and only inspectable via JSON
+   export. Still needs a decision on where the viewer lives (new sheet?
+   filter within the existing category view?) before building.
 
 ## Testing (planned)
 

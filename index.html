@@ -53,9 +53,11 @@
 
     --alert: #c9552f;
 
-    /* category tags stay green/blue in both modes — they mean the same thing */
-    --home: #6fc47f;
-    --work: #5b9fe0;
+    /* Category tags carry the two mode hues as FIXED values — deliberately not
+       remapped under [data-mode], so a Home-tagged category reads gold and a
+       Work-tagged one reads steel whichever mode is currently active. */
+    --home: #d9a441;
+    --work: #a9bdcc;
 
     /* legacy aliases */
     --bg: var(--bg-b);
@@ -205,8 +207,8 @@
     position: fixed;
     left: 0; right: 0; bottom: 0;
     background: var(--surface);
-    border-radius: 18px 18px 0 0;
-    padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--bar-line);
+    padding: 8px 18px calc(20px + env(safe-area-inset-bottom));
     transform: translateY(100%);
     transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
     z-index: 61;
@@ -215,49 +217,57 @@
   }
   .sheet.open { transform: translateY(0); }
   .sheet-grip {
-    width: 38px; height: 4px;
-    background: var(--surface-2);
-    border-radius: 2px;
-    margin: 8px auto 14px;
+    width: 34px; height: 3px;
+    background: var(--acc-dim);
+    margin: 7px auto 15px;
   }
   .field { margin-bottom: 16px; }
+  /* Field labels borrow the category bar: filled strip, hairline, gold tick,
+     rounded right cap. inline-flex so the bar hugs its text like a tab. */
   .field-label {
-    display: block;
-    font-size: 12px; font-weight: 600;
-    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    height: 23px;
+    padding: 0 12px 0 7px;
+    margin-bottom: 9px;
+    background: linear-gradient(90deg, var(--bar-a), var(--bar-b));
+    border: 1px solid var(--bar-line);
+    border-left: 2px solid var(--acc);
+    border-radius: 0 12px 12px 0;
+    font-size: 10.5px; font-weight: 600;
+    color: var(--ink);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 8px;
+    letter-spacing: 0.19em;
   }
   .sheet input[type="text"] {
     width: 100%;
-    background: var(--surface-2);
-    border: 1px solid transparent;
-    border-radius: 12px;
-    padding: 14px 16px;
+    background: linear-gradient(180deg, var(--pan-a), var(--pan-b));
+    border: 1px solid var(--row-line);
+    padding: 13px 14px;
     color: var(--text);
     font-size: 16px;
     outline: none;
   }
-  .sheet input[type="text"]:focus { border-color: var(--accent); }
+  .sheet input[type="text"]:focus { border-color: var(--acc); }
 
   /* Chip rows for category + tag pickers */
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip {
-    background: var(--surface-2);
-    border: 1px solid transparent;
-    border-radius: 20px;
-    padding: 9px 14px;
+    background: linear-gradient(180deg, var(--pan-a), var(--pan-b));
+    border: 1px solid var(--row-line);
+    padding: 9px 13px;
     color: var(--text);
-    font-size: 14px; font-weight: 500;
+    font-size: 13px; font-weight: 500;
+    letter-spacing: 0.06em;
     display: flex; align-items: center; gap: 6px;
   }
   .chip:active { opacity: 0.75; }
-  .chip.selected { border-color: var(--acc); background: var(--acc-wash); color: var(--acc); }
-  .chip .ic { font-size: 15px; }
-  .chip-icon-only { padding: 9px 0; min-width: 46px; justify-content: center; }
-  .chip-icon-only .ic { font-size: 17px; }
-  .chip.chip-add { color: var(--accent); background: var(--surface-2); border-color: var(--surface-2); font-weight: 600; }
+  .chip.selected {
+    border-color: var(--acc);
+    background: var(--acc-wash);
+    color: var(--acc);
+  }
+  .chip.chip-add { color: var(--acc); border-style: dashed; font-weight: 600; }
 
   /* Organize sheet stacks above the create/edit sheet when opened from its chip */
   #cat-backdrop { z-index: 80; }
@@ -266,31 +276,32 @@
   .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
 
   /* Organize-categories sheet rows */
-  #cat-list { display: flex; flex-direction: column; gap: 8px; }
+  #cat-list { display: flex; flex-direction: column; gap: 3px; }
   .cat-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    background: var(--surface-2);
-    border-radius: 12px;
-    padding: 10px 12px;
+    gap: 9px;
+    background:
+      repeating-linear-gradient(45deg, var(--hatch) 0 3px, transparent 3px 7px),
+      linear-gradient(180deg, var(--pan-a), var(--pan-b));
+    border-bottom: 1px solid var(--row-line);
+    padding: 6px 10px;
     transition: transform 0.12s ease, opacity 0.12s ease;
   }
   .cat-row.dragging { opacity: 0.5; }
-  .cat-row.drag-over { transform: translateY(2px); box-shadow: 0 0 0 2px var(--accent); }
-  .cat-row .handle { color: var(--muted); font-size: 18px; touch-action: none; padding: 0 2px; line-height: 1; }
+  .cat-row.drag-over { transform: translateY(2px); box-shadow: 0 0 0 2px var(--acc); }
+  .cat-row .handle { color: var(--ink-2); font-size: 15px; touch-action: none; padding: 4px 2px; line-height: 1; opacity: 0.65; }
   .cat-row input.cat-name {
     flex: 1;
     min-width: 0;
     background: none;
     border: 1px solid transparent;
-    border-radius: 8px;
-    padding: 8px 8px;
+    padding: 7px 6px;
     color: var(--text);
     font-size: 16px;
     outline: none;
   }
-  .cat-row input.cat-name:focus { border-color: var(--accent); background: var(--surface); }
+  .cat-row input.cat-name:focus { border-color: var(--acc); background: var(--bg-c); }
   .cat-row .cat-del {
     color: var(--danger);
     background: none; border: none;
@@ -308,32 +319,56 @@
     font-size: 15px;
     display: flex; align-items: center; justify-content: center;
   }
-  .cat-tag-btn.tag-home { background: rgba(111,196,127,0.20); color: var(--home); }
-  .cat-tag-btn.tag-work { background: rgba(91,159,224,0.20); color: var(--work); }
+  .cat-tag-btn.tag-home { background: rgba(217,164,65,0.18); color: var(--home); }
+  .cat-tag-btn.tag-work { background: rgba(169,189,204,0.18); color: var(--work); }
   .cat-tag-btn:active { opacity: 0.75; }
   .cat-add-row { display: flex; gap: 10px; margin-top: 14px; }
   .cat-add-row input {
     flex: 1; min-width: 0;
-    background: var(--surface-2);
-    border: 1px solid transparent;
-    border-radius: 12px;
-    padding: 14px 16px;
+    background: linear-gradient(180deg, var(--pan-a), var(--pan-b));
+    border: 1px solid var(--row-line);
+    padding: 13px 14px;
     color: var(--text);
     font-size: 16px;
     outline: none;
   }
-  .cat-add-row input:focus { border-color: var(--accent); }
+  .cat-add-row input:focus { border-color: var(--acc); }
   .cat-add-btn { flex: 0 0 auto; padding: 14px 20px; }
+  /* Action buttons carry the same opposing 45° notch as the FAB and the top
+     tiles — the shape is reserved for things you press. No border: clip-path
+     cuts it away on the diagonals. */
   .sheet-btn {
     flex: 1;
-    border: none; border-radius: 12px;
+    border: none;
     padding: 15px;
-    font-size: 15px; font-weight: 600;
+    font-size: 13px; font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    clip-path: polygon(
+      0 0,
+      calc(100% - 12px) 0,
+      100% 12px,
+      100% 100%,
+      12px 100%,
+      0 calc(100% - 12px)
+    );
   }
-  .sheet-btn.primary { background: var(--acc); color: var(--on-acc); }
-  .sheet-btn.primary:disabled { opacity: 0.4; }
-  .sheet-btn.secondary { background: var(--surface-2); color: var(--text); }
-  .sheet-btn.danger { background: none; color: var(--danger); flex: 0 0 auto; padding: 15px 18px; }
+  .sheet-btn.primary {
+    background: linear-gradient(180deg, var(--acc-hi), var(--acc));
+    color: var(--on-acc);
+  }
+  .sheet-btn.primary:disabled { opacity: 0.35; }
+  .sheet-btn.secondary {
+    background: linear-gradient(180deg, var(--tab-a), var(--tab-b));
+    color: var(--ink);
+  }
+  .sheet-btn:active { filter: brightness(1.2); }
+  /* Text-only, so a notch would have no fill to cut */
+  .sheet-btn.danger {
+    background: none; color: var(--danger);
+    flex: 0 0 auto; padding: 15px 16px;
+    clip-path: none;
+  }
 
   /* Hamburger dropdown menu */
   .menu-btn { margin-left: auto; }
@@ -349,10 +384,9 @@
     top: calc(58px + env(safe-area-inset-top));
     right: calc(20px + env(safe-area-inset-right));
     background: var(--surface);
-    border: 1px solid var(--surface-2);
-    border-radius: 14px;
-    padding: 6px;
-    min-width: 190px;
+    border: 1px solid var(--bar-line);
+    padding: 5px;
+    min-width: 196px;
     box-shadow: 0 10px 34px rgba(0,0,0,0.5);
     opacity: 0;
     transform: translateY(-6px) scale(0.98);
@@ -368,14 +402,15 @@
     text-align: left;
     background: none;
     border: none;
+    border-left: 2px solid transparent;
     color: var(--text);
-    font-size: 15px;
-    padding: 12px 14px;
-    border-radius: 9px;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    padding: 11px 13px;
   }
-  .menu-item:active { background: var(--surface-2); }
+  .menu-item:active { background: var(--acc-wash); border-left-color: var(--acc); }
   .menu-item.danger { color: var(--danger); }
-  .menu-sep { height: 1px; background: var(--surface-2); margin: 5px 8px; }
+  .menu-sep { height: 1px; background: var(--row-line); margin: 4px 6px; }
 
   /* Scroll region holding all category sections */
   .scroll {
@@ -524,11 +559,12 @@
     left: 50%;
     bottom: calc(24px + env(safe-area-inset-bottom));
     transform: translateX(-50%) translateY(20px);
-    background: var(--surface-2);
+    background: linear-gradient(180deg, var(--tab-a), var(--tab-b));
+    border: 1px solid var(--bar-line);
     color: var(--text);
-    padding: 12px 20px;
-    border-radius: 10px;
-    font-size: 14px;
+    padding: 11px 18px;
+    font-size: 13px;
+    letter-spacing: 0.06em;
     opacity: 0; pointer-events: none;
     transition: all 0.25s;
     box-shadow: 0 6px 24px rgba(0,0,0,0.4);

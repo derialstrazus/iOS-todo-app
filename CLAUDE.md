@@ -64,8 +64,12 @@ Delivered and in active use:
   category header (replacing the task count) opens the creation sheet with
   Category hidden/locked to that category.
 - Category tags: categories can be tagged "Home" or "Work" (cycled via a
-  badge in the Organize Categories sheet) and show as a colored left accent
-  bar (green/blue) on the main-screen category section.
+  badge in the Organize Categories sheet) and show as a coloured left tick
+  and caret on the main-screen category bar. The two hues are gold and steel
+  — the same pair the modes use — held as **fixed** values that are
+  deliberately *not* remapped under `[data-mode]`, so a Home-tagged category
+  reads gold and a Work-tagged one steel whichever mode is active. Untagged
+  categories fall through to the current mode's accent.
 - Work Mode / Home Mode toggle, replacing Show All / Collapse All at the top:
   selecting a mode moves matching-tag categories to the top and expands them,
   collapses opposite-tag categories, and leaves untagged categories untouched.
@@ -100,6 +104,12 @@ Delivered and in active use:
   steel. Home *and* cleared-mode both fall back to the gold on `:root`, so
   those two states look identical apart from the active tab. `theme-color`
   tracks the mode so the iOS status bar follows.
+- Sheets, menu and toast on the same vocabulary as the main screen: square
+  corners throughout, action buttons carrying the 45° notch, and field labels
+  rendered as filled tabs (the category-bar treatment — gold left tick,
+  rounded right cap, `inline-flex` so the bar hugs its text). Organize rows
+  reuse the hatched task-row slab. `.sheet-btn.danger` is text-only and so
+  sets `clip-path: none` — a notch needs a fill to cut.
 
 ## Backlog (build individually, in priority order)
 
@@ -119,13 +129,10 @@ Delivered and in active use:
 5. **Exercise tracker** — archiving now exists, so this is unblocked. Track
    past exercises; long-term, show a GitHub-contributions-style calendar
    checklist of exercise history.
-6. **Restyle the bottom sheets** — the create/edit sheet and the Organize
-   Categories sheet were rethemed to the new palette when the styling refresh
-   landed, but they keep their original rounded, iOS-style geometry (18px
-   corners, pill chips, circular controls). Against the angular main screen
-   they now read as a different design language. Bring them onto the same
-   vocabulary: square corners, 45° notches on the action buttons, and the
-   filled-bar treatment for field labels.
+6. **Organize-sheet "New category" input truncates** its placeholder to
+   "New category nam" — it shares a row with the Add button and gets too
+   narrow. Pre-dates the sheet restyle. Either shorten the placeholder or
+   move Add onto its own row.
 
 ### Parked / long-term
 

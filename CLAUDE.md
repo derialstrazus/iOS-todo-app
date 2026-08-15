@@ -207,6 +207,17 @@ further down). When in doubt, the code wins:
   the replacement element, so the tag tap is dropped with no error. Leaving
   the existing chip elements alone and reading state fresh at click time
   sidesteps the whole race.
+- Screen layer (the nav/dispatcher refactor from Future screens): `render()`
+  is now a dispatcher over a `SCREENS` registry — each entry owns the scroll
+  area's renderer, its palette (a `data-mode` value or `null` for the `:root`
+  gold, mapped to a status-bar colour via `BAR_COLORS`), and a `fab` flag.
+  The top bar is built once at startup by `buildNav()` from a `NAV` registry
+  (Work and Home are two entries that both target the todos screen, setting
+  its `viewMode` sub-state; future screens append one entry each);
+  `render()` only toggles the buttons' active state, never rebuilds them.
+  The active screen persists in `todos.v2.screen`, guarded like the mode,
+  with unknown ids falling back to `todos`. Only the todos screen is
+  registered so far, so nothing changed visually — that's the point.
 - Organize Categories sheet — relabeled **"Restore categories"** in the
   hamburger menu — is now restore-only. Renaming, retagging, reordering,
   archiving, and deleting all moved to the category edit sheet above, so the
@@ -301,7 +312,8 @@ together with the open `todo.js` extraction question under Testing.
 ### Sequencing
 
 Only two things must precede the screens: the multi-domain backup envelope
-and the nav/dispatcher refactor. Both are small standalone passes and don't
+and the nav/dispatcher refactor (**done** — see the screen-layer bullet in
+Current state). Both are small standalone passes and don't
 conflict with backlog #1 (recurring tasks) or #2 (comments). Archive viewer
 is the natural first screen — pure UI over existing data, exercising the
 new nav with zero model risk. Decisions still owed before building: whether

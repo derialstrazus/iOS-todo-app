@@ -571,12 +571,8 @@
 </head>
 <body>
   <div class="controls">
-    <button class="ctrl mode-btn mode-work" id="work-mode-btn" aria-label="Work mode" aria-pressed="false">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13"/><path d="M9 7V4h6v3"/><path d="M3 12h18"/></svg>
-    </button>
-    <button class="ctrl mode-btn mode-home" id="home-mode-btn" aria-label="Home mode" aria-pressed="false">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7v9h-6v-6h-6v6H3z"/></svg>
-    </button>
+    <!-- Nav buttons are built from the NAV registry at startup and inserted
+         before the menu button; see buildNav(). -->
     <button class="ctrl menu-btn" id="menu-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
@@ -685,8 +681,6 @@
   const scroll = document.getElementById("scroll");
   const toast = document.getElementById("toast");
   const fileInput = document.getElementById("file-input");
-  const homeModeBtn = document.getElementById("home-mode-btn");
-  const workModeBtn = document.getElementById("work-mode-btn");
 
   // FAB + bottom sheet
   const fab = document.getElementById("fab");
@@ -853,6 +847,80 @@
   // The mode is a filter: only its own, non-archived categories are on screen, in saved order.
   function displayCategories() {
     return state.categories.filter(function (c) { return tagOf(c) === viewMode && !isArchived(c); });
+  }
+
+  // ---- Screen layer ----
+  // The app is a set of screens sharing the top bar and the scroll area; todos
+  // is the only one so far (archive / exercise / finance are planned — see
+  // CLAUDE.md "Future screens"). Each entry owns the scroll area's renderer,
+  // its palette (a data-mode value, or null for the :root gold), and whether
+  // the task FAB is shown. `viewMode` (home/work) stays a sub-state of the
+  // todos screen — it is not a screen itself.
+  const SCREENS = {
+    todos: {
+      render: renderTodoList,
+      palette: function () { return viewMode === "work" ? "work" : null; },
+      fab: true
+    }
+  };
+
+  // data-mode value → iOS status-bar colour. Falls back to the :root gold.
+  const BAR_COLORS = { default: "#0d0a06", work: "#090c0f" };
+
+  // Which screen owns the scroll area. Persisted like the mode, guarded the
+  // same way (see loadViewMode's comment). An unknown saved id — say, from a
+  // version that had screens this one doesn't — falls back to todos.
+  const SCREEN_KEY = "todos.v2.screen";
+  let screen = loadScreen();
+  function loadScreen() {
+    try {
+      const s = localStorage.getItem(SCREEN_KEY);
+      if (s && SCREENS[s]) return s;
+    } catch (e) {}
+    return "todos";
+  }
+  function saveScreen() {
+    try { localStorage.setItem(SCREEN_KEY, screen); } catch (e) {}
+  }
+  function setScreen(next) {
+    if (!SCREENS[next] || screen === next) return;
+    screen = next;
+    saveScreen();
+    render();
+  }
+
+  // Top-bar nav registry. Todos contributes two entries — Work and Home are
+  // its viewMode sub-state, but at the bar they behave like screens of their
+  // own, so a tap sets both. Future screens append one entry each. Buttons
+  // are built once at startup (buildNav) and inserted before the menu button;
+  // render() only toggles their active state, never rebuilds them.
+  const NAV = [
+    {
+      id: "work", label: "Work mode", cls: "mode-btn mode-work",
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13"/><path d="M9 7V4h6v3"/><path d="M3 12h18"/></svg>',
+      isActive: function () { return screen === "todos" && viewMode === "work"; },
+      onTap: function () { setScreen("todos"); setViewMode("work"); }
+    },
+    {
+      id: "home", label: "Home mode", cls: "mode-btn mode-home",
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7v9h-6v-6h-6v6H3z"/></svg>',
+      isActive: function () { return screen === "todos" && viewMode === "home"; },
+      onTap: function () { setScreen("todos"); setViewMode("home"); }
+    }
+  ];
+  const navButtons = {}; // id → button element, filled by buildNav
+  function buildNav() {
+    const menuBtn = document.getElementById("menu-btn");
+    NAV.forEach(function (entry) {
+      const b = document.createElement("button");
+      b.className = "ctrl " + entry.cls;
+      b.innerHTML = entry.icon;
+      b.setAttribute("aria-label", entry.label);
+      b.setAttribute("aria-pressed", "false");
+      b.onclick = entry.onTap;
+      navButtons[entry.id] = b;
+      menuBtn.parentNode.insertBefore(b, menuBtn);
+    });
   }
 
   let toastTimer;
@@ -1184,19 +1252,31 @@
     catEditCat = next;
   }
 
-  // ---- Single-page render: one collapsible section per category ----
+  // ---- Render: dispatch to the active screen ----
+  // The dispatcher owns everything the screens share — nav button states, the
+  // palette stamp (work mode goes cold steel; Home and "no palette" both fall
+  // back to the :root gold), the status-bar colour, FAB visibility — then
+  // hands the scroll area to the active screen's renderer.
   function render() {
-    scroll.innerHTML = "";
-    homeModeBtn.classList.toggle("active", viewMode === "home");
-    workModeBtn.classList.toggle("active", viewMode === "work");
-    homeModeBtn.setAttribute("aria-pressed", viewMode === "home" ? "true" : "false");
-    workModeBtn.setAttribute("aria-pressed", viewMode === "work" ? "true" : "false");
-    // Drives the palette swap. Work mode goes cold steel; Home and "no mode"
-    // both fall back to the default gold defined on :root.
-    if (viewMode === "work") document.documentElement.setAttribute("data-mode", "work");
+    NAV.forEach(function (entry) {
+      const b = navButtons[entry.id];
+      const on = entry.isActive();
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    const scr = SCREENS[screen];
+    const pal = scr.palette ? scr.palette() : null;
+    if (pal) document.documentElement.setAttribute("data-mode", pal);
     else document.documentElement.removeAttribute("data-mode");
     const tc = document.getElementById("theme-color");
-    if (tc) tc.setAttribute("content", viewMode === "work" ? "#090c0f" : "#0d0a06");
+    if (tc) tc.setAttribute("content", BAR_COLORS[pal] || BAR_COLORS.default);
+    fab.style.display = scr.fab ? "" : "none";
+    scr.render();
+  }
+
+  // ---- Todos screen: one collapsible section per category ----
+  function renderTodoList() {
+    scroll.innerHTML = "";
 
     if (state.categories.length === 0) {
       const p = document.createElement("div");
@@ -1690,9 +1770,6 @@
   menuBtn.onclick = toggleMenu;
   menuBackdrop.onclick = closeMenu;
 
-  homeModeBtn.onclick = function () { setViewMode("home"); };
-  workModeBtn.onclick = function () { setViewMode("work"); };
-
   document.getElementById("show-all-btn").onclick = menuAction(showAll);
   document.getElementById("collapse-all-btn").onclick = menuAction(collapseAll);
   document.getElementById("organize-cats-btn").onclick = menuAction(openCatSheet);
@@ -1730,6 +1807,7 @@
 
   // Catches the case where a restored backup already carries an over-threshold archive.
   checkArchiveThreshold();
+  buildNav();
   render();
 </script>
 </body>

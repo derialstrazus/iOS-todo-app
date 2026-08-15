@@ -7,8 +7,12 @@ for family responsibilities.
 
 ## Architecture
 
-- **Single file:** the entire app is one `index.html` (HTML + CSS + JS inline).
-- **Hosting:** GitHub Pages. `git push` deploys — no build step.
+- **Single file:** all code lives in one `index.html` (HTML + CSS + JS
+  inline). The only sidecar files are `manifest.json` and the three icon
+  PNGs — PWA plumbing, not code; they're expected and rarely change.
+- **Hosting:** GitHub Pages at
+  <https://derialstrazus.github.io/iOS-todo-app/>. `git push` deploys — no
+  build step.
 - **Install target:** iOS Safari, added to the iPhone Home Screen as a PWA.
 - **Persistence:** `localStorage` only. Data is stored as a **versioned JSON
   envelope** (forward-compatible). There is **no backend and no sync** — this is
@@ -40,10 +44,17 @@ for family responsibilities.
   tested before it's considered done.
 - **Nothing is locked in.** Aesthetic and UX feel matter; reversions are fine if
   something doesn't feel right in real use.
+- **Sheet buttons with side effects close the sheet immediately.** When a
+  button in a bottom sheet performs its action (save, archive, restore,
+  delete), the sheet closes on that tap — it doesn't stay open waiting for
+  a separate dismissal.
 
 ## Current state (feature-complete, in real-world trial)
 
-Delivered and in active use:
+Delivered and in active use. **This list is chronological — later bullets
+supersede earlier ones** (e.g. the tag badge now reads WAIT, not HOLD, and
+the Organize Categories sheet is now restore-only; the corrections appear
+further down). When in doubt, the code wins:
 
 - Collapsible single-page category view with Show All / Collapse All.
 - Floating action button (FAB) opening a bottom sheet for task creation
@@ -337,6 +348,7 @@ model, and API-vs-email for the side project.
 ## Local dev
 
 - Quick check: open `index.html` directly in a browser.
-- Serve (closer to PWA behavior): `python3 -m http.server` then open the printed
+- Serve (closer to PWA behavior): `python -m http.server` (or `py -m
+  http.server` on Windows; `python3` on macOS/Linux) then open the printed
   localhost URL.
 - Deploy: commit and `git push` — GitHub Pages serves the pushed `index.html`.

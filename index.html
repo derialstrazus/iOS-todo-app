@@ -269,9 +269,13 @@
   }
   .chip.chip-add { color: var(--acc); border-style: dashed; font-weight: 600; }
 
-  /* Organize sheet stacks above the create/edit sheet when opened from its chip */
-  #cat-backdrop { z-index: 80; }
-  #cat-sheet { z-index: 81; }
+  /* Elevated tier: the category edit sheet stacks above the create/edit task sheet
+     when opened from its "+ New" chip (harmless when opened standalone from the main
+     page, since nothing else is open underneath there). The Organize sheet, reachable
+     only from the hamburger menu, never overlaps the task sheet either, but shares
+     this tier since the two are never open at the same time. */
+  #cat-backdrop, #cat-edit-backdrop { z-index: 80; }
+  #cat-sheet, #cat-edit-sheet { z-index: 81; }
 
   .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
 
@@ -288,52 +292,28 @@
     padding: 6px 10px;
     transition: transform 0.12s ease, opacity 0.12s ease;
   }
-  .cat-row.dragging { opacity: 0.5; }
-  .cat-row.drag-over { transform: translateY(2px); box-shadow: 0 0 0 2px var(--acc); }
-  .cat-row .handle { color: var(--ink-2); font-size: 15px; touch-action: none; padding: 4px 2px; line-height: 1; opacity: 0.65; }
-  .cat-row input.cat-name {
+  .cat-row.archived { opacity: 0.7; }
+  .cat-name-static {
     flex: 1;
     min-width: 0;
-    background: none;
-    border: 1px solid transparent;
     padding: 7px 6px;
-    color: var(--text);
+    color: var(--ink-2);
     font-size: 16px;
-    outline: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .cat-row input.cat-name:focus { border-color: var(--acc); background: var(--bg-c); }
-  .cat-row .cat-del {
-    color: var(--danger);
-    background: none; border: none;
-    font-size: 18px; padding: 4px 8px;
-    opacity: 0.7; flex-shrink: 0;
-  }
-  .cat-row .cat-del:active { opacity: 1; }
-  .cat-tag-btn {
+  .cat-restore-btn {
     flex-shrink: 0;
-    width: 30px; height: 30px;
-    border: none;
-    border-radius: 50%;
-    background: var(--surface);
-    color: var(--muted);
-    font-size: 15px;
-    display: flex; align-items: center; justify-content: center;
+    background: var(--acc-wash);
+    border: 1px solid var(--acc-dim);
+    color: var(--acc);
+    font-size: 12px; font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 7px 12px;
   }
-  .cat-tag-btn.tag-home { background: rgba(217,164,65,0.18); color: var(--home); }
-  .cat-tag-btn.tag-work { background: rgba(169,189,204,0.18); color: var(--work); }
-  .cat-tag-btn:active { opacity: 0.75; }
-  .cat-add-row { display: flex; gap: 10px; margin-top: 14px; }
-  .cat-add-row input {
-    flex: 1; min-width: 0;
-    background: linear-gradient(180deg, var(--pan-a), var(--pan-b));
-    border: 1px solid var(--row-line);
-    padding: 13px 14px;
-    color: var(--text);
-    font-size: 16px;
-    outline: none;
-  }
-  .cat-add-row input:focus { border-color: var(--acc); }
-  .cat-add-btn { flex: 0 0 auto; padding: 14px 20px; }
+  .cat-restore-btn:active { opacity: 0.75; }
   /* Action buttons carry the same opposing 45° notch as the FAB and the top
      tiles — the shape is reserved for things you press. No border: clip-path
      cuts it away on the diagonals. */
@@ -357,7 +337,7 @@
     background: linear-gradient(180deg, var(--acc-hi), var(--acc));
     color: var(--on-acc);
   }
-  .sheet-btn.primary:disabled { opacity: 0.35; }
+  .sheet-btn:disabled { opacity: 0.35; }
   .sheet-btn.secondary {
     background: linear-gradient(180deg, var(--tab-a), var(--tab-b));
     color: var(--ink);
@@ -369,10 +349,17 @@
     flex: 0 0 auto; padding: 15px 16px;
     clip-path: none;
   }
-  /* Task sheet action row: Delete left, Save right at two thirds. Scoped by id
-     so .cat-add-btn's own flex isn't disturbed. */
+  /* Task sheet action row: Delete left, Save right at two thirds. Scoped by id so
+     other sheets' own .sheet-btn.danger flex isn't disturbed. */
   #sheet-delete { flex: 1; }
   #sheet-save { flex: 2; }
+  /* Category edit sheet's action row follows the same pattern: .sheet-btn.danger
+     defaults to flex: 0 0 auto (text-only, no fill for the notch to cut), so Delete
+     needs its own flex override to share the row evenly with Archive. */
+  #cat-edit-delete { flex: 1; }
+  /* Up / Down / Top: three equal-width buttons, no extra top margin since the
+     field-label above it already provides spacing (unlike .sheet-actions). */
+  .cat-edit-move-row { display: flex; gap: 8px; }
 
   /* Hamburger dropdown menu */
   .menu-btn { margin-left: auto; }
@@ -446,9 +433,12 @@
   }
   .section.tag-home .sec-head { border-left-color: var(--home); }
   .section.tag-work .sec-head { border-left-color: var(--work); }
+  /* Sized well past the 9px glyph — this is now the only part of the bar that still
+     toggles collapse (tapping the rest opens the category edit sheet), so it needs a
+     real touch target rather than the icon's own tiny footprint. */
   .sec-caret {
     color: var(--acc);
-    width: 14px; height: 14px;
+    width: 28px; height: 28px;
     flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     transition: transform 0.15s ease;
@@ -599,7 +589,7 @@
     <button class="menu-item" id="show-all-btn" role="menuitem">Show all</button>
     <button class="menu-item" id="collapse-all-btn" role="menuitem">Collapse all</button>
     <div class="menu-sep"></div>
-    <button class="menu-item" id="organize-cats-btn" role="menuitem">☰ Organize categories</button>
+    <button class="menu-item" id="organize-cats-btn" role="menuitem">Restore categories</button>
     <div class="menu-sep"></div>
     <button class="menu-item" id="export-btn" role="menuitem">↓ Export backup</button>
     <button class="menu-item" id="import-btn" role="menuitem">↑ Restore backup</button>
@@ -645,17 +635,45 @@
     <div class="sheet-grip"></div>
 
     <div class="field">
-      <span class="field-label">Categories</span>
+      <span class="field-label">Archived</span>
       <div id="cat-list"></div>
-    </div>
-
-    <div class="cat-add-row">
-      <input id="cat-new-input" type="text" placeholder="New category name" autocomplete="off" enterkeyhint="done">
-      <button class="sheet-btn primary cat-add-btn" id="cat-add-btn">Add</button>
     </div>
 
     <div class="sheet-actions">
       <button class="sheet-btn secondary" id="cat-done-btn">Done</button>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" id="cat-edit-backdrop"></div>
+  <div class="sheet" id="cat-edit-sheet" role="dialog" aria-modal="true">
+    <div class="sheet-grip"></div>
+
+    <div class="field">
+      <label class="field-label" for="cat-edit-name">Category</label>
+      <input id="cat-edit-name" type="text" autocomplete="off" enterkeyhint="done">
+    </div>
+
+    <div class="field">
+      <span class="field-label">Type</span>
+      <div class="chips" id="cat-edit-type-chips"></div>
+    </div>
+
+    <div class="field" id="cat-edit-order-field">
+      <span class="field-label">Order</span>
+      <div class="cat-edit-move-row">
+        <button class="sheet-btn secondary" id="cat-edit-move-up">Up</button>
+        <button class="sheet-btn secondary" id="cat-edit-move-down">Down</button>
+        <button class="sheet-btn secondary" id="cat-edit-move-top">Top</button>
+      </div>
+    </div>
+
+    <div class="sheet-actions" id="cat-edit-manage-actions">
+      <button class="sheet-btn danger" id="cat-edit-delete">Delete</button>
+      <button class="sheet-btn secondary" id="cat-edit-archive">Archive</button>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="sheet-btn secondary" id="cat-edit-done">Done</button>
     </div>
   </div>
 
@@ -681,13 +699,26 @@
   const sheetSave = document.getElementById("sheet-save");
   const sheetDelete = document.getElementById("sheet-delete");
 
-  // Organize-categories sheet
+  // Organize-categories sheet — restore-only; see renderCatList()
   const catSheet = document.getElementById("cat-sheet");
   const catBackdrop = document.getElementById("cat-backdrop");
   const catList = document.getElementById("cat-list");
-  const catNewInput = document.getElementById("cat-new-input");
-  const catAddBtn = document.getElementById("cat-add-btn");
   const catDoneBtn = document.getElementById("cat-done-btn");
+
+  // Per-category edit sheet, opened either by tapping a category bar on the main page
+  // (editing) or the task sheet's "+ New" chip (creating; see openCategoryCreateSheet)
+  const catEditSheet = document.getElementById("cat-edit-sheet");
+  const catEditBackdrop = document.getElementById("cat-edit-backdrop");
+  const catEditName = document.getElementById("cat-edit-name");
+  const catEditTypeChips = document.getElementById("cat-edit-type-chips");
+  const catEditOrderField = document.getElementById("cat-edit-order-field");
+  const catEditMoveUp = document.getElementById("cat-edit-move-up");
+  const catEditMoveDown = document.getElementById("cat-edit-move-down");
+  const catEditMoveTop = document.getElementById("cat-edit-move-top");
+  const catEditManageActions = document.getElementById("cat-edit-manage-actions");
+  const catEditArchiveBtn = document.getElementById("cat-edit-archive");
+  const catEditDeleteBtn = document.getElementById("cat-edit-delete");
+  const catEditDoneBtn = document.getElementById("cat-edit-done");
 
   // Available tags. `short` is what shows on the task row as a dog-eared badge;
   // `label` is the full name used in the picker and for accessibility.
@@ -703,7 +734,7 @@
   }
 
   // Category tags: every category is either "home" or "work" — there is no untagged
-  // state. Toggled via a badge in the organize sheet, and shown as a colored accent
+  // state. Toggled via chips in the category edit sheet, and shown as a colored accent
   // bar on the main-screen category section.
   //
   // `categoryTags` can still be sparse: categories created before tagging existed have
@@ -713,7 +744,6 @@
   function tagOf(cat) {
     return state.categoryTags[cat] === "home" ? "home" : "work";
   }
-  function catTagGlyph(tag) { return tag === "home" ? "H" : "W"; }
 
   // Transient state for whatever the sheet is currently editing/creating
   let sheetCtx = null; // { mode:'create'|'edit', cat, tag, taskCat, taskIndex }
@@ -757,13 +787,14 @@
   function saveArchive() { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive)); }
 
   function defaultState() {
-    return { categories: ["Home"], active: "Home", tasks: { "Home": [] }, categoryTags: {} };
+    return { categories: ["Home"], active: "Home", tasks: { "Home": [] }, categoryTags: {}, categoryArchived: {} };
   }
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s && s.categories && s.tasks) {
         if (!s.categoryTags || typeof s.categoryTags !== "object") s.categoryTags = {};
+        if (!s.categoryArchived || typeof s.categoryArchived !== "object") s.categoryArchived = {};
         return s;
       }
     } catch (e) {}
@@ -771,7 +802,7 @@
     try {
       const old = JSON.parse(localStorage.getItem("todos.v1"));
       if (Array.isArray(old) && old.length) {
-        return { categories: ["Home"], active: "Home", tasks: { "Home": old }, categoryTags: {} };
+        return { categories: ["Home"], active: "Home", tasks: { "Home": old }, categoryTags: {}, categoryArchived: {} };
       }
     } catch (e) {}
     return defaultState();
@@ -819,9 +850,9 @@
     render();
   }
 
-  // The mode is a filter: only its own categories are on screen, in saved order.
+  // The mode is a filter: only its own, non-archived categories are on screen, in saved order.
   function displayCategories() {
-    return state.categories.filter(function (c) { return tagOf(c) === viewMode; });
+    return state.categories.filter(function (c) { return tagOf(c) === viewMode && !isArchived(c); });
   }
 
   let toastTimer;
@@ -837,7 +868,11 @@
   function createCategory(name) {
     name = (name || "").trim();
     if (!name) return "Enter a name";
-    if (state.categories.indexOf(name) !== -1) return "Category already exists";
+    if (state.categories.indexOf(name) !== -1) {
+      return isArchived(name)
+        ? '"' + name + '" is archived — restore it from the menu to reuse the name'
+        : "Category already exists";
+    }
     state.categories.push(name);
     state.tasks[name] = [];
     // New categories are Work by default. Written explicitly rather than left to tagOf()'s
@@ -858,9 +893,17 @@
     state.tasks[newName] = state.tasks[oldName];
     delete state.tasks[oldName];
     if (state.categoryTags[oldName] !== undefined) { state.categoryTags[newName] = state.categoryTags[oldName]; delete state.categoryTags[oldName]; }
+    if (state.categoryArchived[oldName] !== undefined) { state.categoryArchived[newName] = state.categoryArchived[oldName]; delete state.categoryArchived[oldName]; }
     if (collapsed[oldName] !== undefined) { collapsed[newName] = collapsed[oldName]; delete collapsed[oldName]; saveCollapsed(); }
     if (state.active === oldName) state.active = newName;
+    // Archived tasks carry the category name they had when archived — without this,
+    // a rename splits that category's history across the old and new names.
+    let archiveChanged = false;
+    archive.forEach(function (entry) {
+      if (entry.category === oldName) { entry.category = newName; archiveChanged = true; }
+    });
     save();
+    if (archiveChanged) saveArchive();
     return true;
   }
 
@@ -871,6 +914,7 @@
     state.categories.splice(idx, 1);
     delete state.tasks[cat];
     delete state.categoryTags[cat];
+    delete state.categoryArchived[cat];
     delete collapsed[cat]; saveCollapsed();
     if (state.active === cat) state.active = state.categories[0];
     save();
@@ -883,27 +927,93 @@
     save();
   }
 
-  function moveCategory(fromIdx, toIdx) {
-    if (fromIdx === toIdx) return;
-    if (fromIdx < 0 || fromIdx >= state.categories.length) return;
-    if (toIdx < 0 || toIdx >= state.categories.length) return;
-    const moved = state.categories.splice(fromIdx, 1)[0];
-    state.categories.splice(toIdx, 0, moved);
+  // A category can only be archived once it has no unfinished tasks — that's what keeps
+  // this small: no second task-payload store, just a flag. Its completed tasks sweep into
+  // the archive via the same path as "Archive done"; the category itself never leaves
+  // state.categories, so restoring needs nothing more than clearing the flag and its
+  // position is already exactly where it was.
+  function isArchived(cat) { return !!state.categoryArchived[cat]; }
+
+  function archiveCategory(cat) {
+    const idx = state.categories.indexOf(cat);
+    if (idx === -1) return "Category not found";
+    if (isArchived(cat)) return true;
+    const activeCount = state.categories.filter(function (c) { return !isArchived(c); }).length;
+    if (activeCount <= 1) return "Keep at least one category";
+    const tasks = state.tasks[cat] || [];
+    if (tasks.some(function (t) { return !t.done; })) return "Finish or delete remaining tasks first";
+    const n = sweepDoneTasks(cat);
+    state.categoryArchived[cat] = true;
+    delete collapsed[cat]; saveCollapsed();
+    save();
+    if (n) saveArchive();
+    return true;
+  }
+
+  function restoreCategory(cat) {
+    const idx = state.categories.indexOf(cat);
+    if (idx === -1) return "Category not found";
+    delete state.categoryArchived[cat];
+    save();
+    return true;
+  }
+
+  // Up/Down/Top on the category edit sheet reorder relative to the category's *displayed*
+  // neighbors (same tag, not archived) rather than raw array position. state.categories can
+  // have the other tag's categories interleaved between two same-tag ones, so stepping by a
+  // raw index could shuffle position without changing anything the user can see — or worse,
+  // silently reorder categories in the *other* mode as a side effect.
+  function categoryNeighbors(cat) {
+    const tag = tagOf(cat);
+    return state.categories.filter(function (c) { return tagOf(c) === tag && !isArchived(c); });
+  }
+
+  // Swaps only these two entries' positions, leaving everything else (including any
+  // interleaved other-tag categories sitting between them) undisturbed.
+  function swapCategories(a, b) {
+    const ai = state.categories.indexOf(a);
+    const bi = state.categories.indexOf(b);
+    if (ai === -1 || bi === -1) return;
+    state.categories[ai] = b;
+    state.categories[bi] = a;
+    save();
+  }
+
+  function moveCategoryUp(cat) {
+    const list = categoryNeighbors(cat);
+    const i = list.indexOf(cat);
+    if (i <= 0) return;
+    swapCategories(cat, list[i - 1]);
+  }
+
+  function moveCategoryDown(cat) {
+    const list = categoryNeighbors(cat);
+    const i = list.indexOf(cat);
+    if (i === -1 || i >= list.length - 1) return;
+    swapCategories(cat, list[i + 1]);
+  }
+
+  function moveCategoryToTop(cat) {
+    const list = categoryNeighbors(cat);
+    if (list.length === 0 || list[0] === cat) return;
+    const idx = state.categories.indexOf(cat);
+    if (idx === -1) return;
+    state.categories.splice(idx, 1);
+    const firstIdx = state.categories.indexOf(list[0]);
+    state.categories.splice(firstIdx, 0, cat);
     save();
   }
 
   // ---- Organize-categories sheet ----
+  // Restore-only: creating and editing active categories now live in the category edit
+  // sheet (main page bar tap, or the task sheet's "+ New" chip), so this sheet's one job
+  // is surfacing archived categories to bring back.
   function openCatSheet() {
     renderCatList();
-    catNewInput.value = "";
-    updateCatAddEnabled();
     catBackdrop.classList.add("open");
     catSheet.classList.add("open");
   }
 
-  function updateCatAddEnabled() {
-    catAddBtn.disabled = !catNewInput.value.trim();
-  }
   function closeCatSheet() {
     catSheet.classList.remove("open");
     catBackdrop.classList.remove("open");
@@ -914,120 +1024,164 @@
 
   function renderCatList() {
     catList.innerHTML = "";
-    state.categories.forEach(function (cat, index) {
+    const archivedCats = state.categories.filter(function (c) { return isArchived(c); });
+
+    if (archivedCats.length === 0) {
+      const em = document.createElement("div");
+      em.className = "sec-empty";
+      em.textContent = "No archived categories.";
+      catList.appendChild(em);
+      return;
+    }
+
+    archivedCats.forEach(function (cat) {
       const row = document.createElement("div");
-      row.className = "cat-row";
-      row.dataset.index = index;
+      row.className = "cat-row archived";
 
-      const handle = document.createElement("div");
-      handle.className = "handle";
-      handle.textContent = "\u2261";
+      const name = document.createElement("span");
+      name.className = "cat-name-static";
+      name.textContent = cat;
 
-      const nameInput = document.createElement("input");
-      nameInput.className = "cat-name";
-      nameInput.type = "text";
-      nameInput.value = cat;
-      nameInput.setAttribute("enterkeyhint", "done");
-      // commit rename on blur or Enter
-      nameInput.dataset.original = cat;
-      nameInput.onblur = function () { commitRename(nameInput); };
-      nameInput.addEventListener("keydown", function (e) {
-        if (e.key === "Enter") { e.preventDefault(); nameInput.blur(); }
-      });
+      const restoreBtn = document.createElement("button");
+      restoreBtn.className = "cat-restore-btn";
+      restoreBtn.textContent = "Restore";
+      restoreBtn.onclick = function () { restoreFromCatSheet(cat); };
 
-      const curTag = tagOf(cat);
-      const tagBtn = document.createElement("button");
-      tagBtn.className = "cat-tag-btn tag-" + curTag;
-      tagBtn.textContent = catTagGlyph(curTag);
-      tagBtn.setAttribute("aria-label", "Category tag: " + curTag + ", tap to switch");
-      tagBtn.onclick = function () { toggleCategoryTag(cat); renderCatList(); };
-
-      const del = document.createElement("button");
-      del.className = "cat-del";
-      del.textContent = "\u2715";
-      del.onclick = function () { deleteFromCatSheet(cat); };
-
-      row.append(handle, nameInput, tagBtn, del);
-      attachCatDrag(row, handle, index);
+      row.append(name, restoreBtn);
       catList.appendChild(row);
     });
   }
 
-  function commitRename(input) {
-    const original = input.dataset.original;
-    const next = input.value.trim();
-    if (next === original) { input.value = original; return; }
-    const res = renameCategory(original, next);
-    if (res !== true) {
-      showToast(res);
-      input.value = original; // revert on failure
-      return;
-    }
-    input.dataset.original = next;
-    // re-render main view lazily on close; keep the sheet list stable otherwise
-  }
-
-  function deleteFromCatSheet(cat) {
-    if (state.categories.length === 1) { showToast("Keep at least one category"); return; }
+  // Shared by the category edit sheet's Delete button (confirmAndDeleteCategory is the
+  // only caller now that the Organize sheet no longer lists active categories): confirms
+  // (with a task count if any), then deletes. Returns whether it happened.
+  function confirmAndDeleteCategory(cat) {
+    if (state.categories.length === 1) { showToast("Keep at least one category"); return false; }
     const n = (state.tasks[cat] || []).length;
     const msg = n > 0
       ? 'Delete "' + cat + '" and its ' + n + ' task' + (n === 1 ? "" : "s") + "?"
       : 'Delete "' + cat + '"?';
-    if (!confirm(msg)) return;
+    if (!confirm(msg)) return false;
     const res = deleteCategory(cat);
-    if (res !== true) { showToast(res); return; }
-    renderCatList();
+    if (res !== true) { showToast(res); return false; }
+    return true;
   }
 
-  function addFromCatSheet() {
-    const res = createCategory(catNewInput.value);
+  function restoreFromCatSheet(cat) {
+    const res = restoreCategory(cat);
     if (res !== true) { showToast(res); return; }
-    catNewInput.value = "";
-    updateCatAddEnabled();
     renderCatList();
-    catNewInput.focus();
+    showToast('"' + cat + '" restored');
   }
 
-  // Drag reordering of category rows (mirrors the task drag pattern)
-  let catDragIndex = null;
-  function attachCatDrag(row, handle, index) {
-    function siblings() {
-      return Array.prototype.slice.call(catList.children).filter(function (n) { return n.classList.contains("cat-row"); });
-    }
-    function start() { catDragIndex = index; row.classList.add("dragging"); }
-    function move(clientY) {
-      if (catDragIndex === null) return;
-      const items = siblings();
-      let target = null;
-      items.forEach(function (it) {
-        const r = it.getBoundingClientRect();
-        if (clientY > r.top && clientY < r.bottom) target = it;
-      });
-      items.forEach(function (it) { it.classList.remove("drag-over"); });
-      if (target && target !== row) target.classList.add("drag-over");
-    }
-    function end(clientY) {
-      if (catDragIndex === null) return;
-      const items = siblings();
-      let toIndex = catDragIndex;
-      items.forEach(function (it) {
-        const r = it.getBoundingClientRect();
-        if (clientY > r.top && clientY < r.bottom) toIndex = parseInt(it.dataset.index, 10);
-      });
-      moveCategory(catDragIndex, toIndex);
-      catDragIndex = null;
-      renderCatList();
-    }
-    handle.addEventListener("touchstart", function () { start(); }, { passive: true });
-    handle.addEventListener("touchmove", function (e) { e.preventDefault(); move(e.touches[0].clientY); }, { passive: false });
-    handle.addEventListener("touchend", function (e) { end(e.changedTouches[0].clientY); });
-    handle.addEventListener("mousedown", function (e) {
-      start();
-      function mm(ev) { move(ev.clientY); }
-      function mu(ev) { end(ev.clientY); document.removeEventListener("mousemove", mm); document.removeEventListener("mouseup", mu); }
-      document.addEventListener("mousemove", mm);
-      document.addEventListener("mouseup", mu);
+  // ---- Category edit sheet ----
+  // Opened either by tapping a category bar on the main page (editing a real category) or
+  // the task sheet's "+ New" chip (creating one — see openCategoryCreateSheet). Everything
+  // here applies immediately (rename/create on blur/Enter, tag/move/archive on tap) — no
+  // Save button, matching the old Organize sheet row's behavior. `catEditCat` tracks the
+  // name currently committed: null while a new category is still just being typed, so
+  // commitCategoryEditName() knows whether the field means "create" or "rename".
+  let catEditCat = null;
+  // True only for the "+ New" flow: Order/Delete/Archive don't apply to a category that
+  // doesn't exist yet (or, once created, wouldn't have had a *previous* position or archive
+  // history) — renderCategoryEditSheet() keeps them hidden for the sheet's whole lifetime.
+  let catEditIsNew = false;
+  // Pending Home/Work selection for a not-yet-created category — there's no real category
+  // to write categoryTags against until the name is actually committed.
+  let catCreateTag = "work";
+
+  function openCategoryEditSheet(cat) {
+    catEditIsNew = false;
+    catEditCat = cat;
+    renderCategoryEditSheet();
+    catEditBackdrop.classList.add("open");
+    catEditSheet.classList.add("open");
+  }
+
+  function openCategoryCreateSheet() {
+    catEditIsNew = true;
+    catEditCat = null;
+    catCreateTag = "work";
+    renderCategoryEditSheet();
+    catEditBackdrop.classList.add("open");
+    catEditSheet.classList.add("open");
+    // focus the name field once the sheet has slid up, matching the task sheet's own open
+    setTimeout(function () { catEditName.focus(); }, 260);
+  }
+
+  function closeCategoryEditSheet() {
+    catEditSheet.classList.remove("open");
+    catEditBackdrop.classList.remove("open");
+    catEditCat = null;
+    catEditIsNew = false;
+    render();
+    // if opened from the task sheet's "+ New" chip, refresh its category chips so a
+    // newly created category shows up as a pick
+    if (sheetCtx) renderSheetChips();
+  }
+
+  function renderCategoryEditSheet() {
+    const cat = catEditCat;
+
+    catEditOrderField.style.display = catEditIsNew ? "none" : "";
+    catEditManageActions.style.display = catEditIsNew ? "none" : "";
+    catEditName.placeholder = catEditIsNew ? "New category name" : "";
+    catEditName.value = cat || "";
+
+    catEditTypeChips.innerHTML = "";
+    ["home", "work"].forEach(function (tag) {
+      const chip = document.createElement("button");
+      const selected = cat ? tagOf(cat) === tag : catCreateTag === tag;
+      chip.className = "chip" + (selected ? " selected" : "");
+      chip.textContent = tag === "home" ? "Home" : "Work";
+      // Reads catEditCat live rather than closing over `cat`: tapping a chip fires
+      // mousedown first, which blurs the name field and can create/rename the category
+      // — including rebuilding these very chip elements — before this click handler
+      // runs. A captured `cat` would still be null (or a stale old name) at that point.
+      chip.onclick = function () {
+        if (catEditCat) {
+          if (tagOf(catEditCat) !== tag) toggleCategoryTag(catEditCat);
+        } else {
+          catCreateTag = tag;
+        }
+        renderCategoryEditSheet();
+      };
+      catEditTypeChips.appendChild(chip);
     });
+
+    if (catEditIsNew) return;
+
+    const neighbors = categoryNeighbors(cat);
+    const idx = neighbors.indexOf(cat);
+    catEditMoveUp.disabled = idx <= 0;
+    catEditMoveDown.disabled = idx === -1 || idx >= neighbors.length - 1;
+    catEditMoveTop.disabled = idx <= 0;
+  }
+
+  function commitCategoryEditName() {
+    const cat = catEditCat;
+    const next = catEditName.value.trim();
+
+    if (!cat) {
+      // Nothing created yet — this field IS the create flow, not a rename. A blur with
+      // nothing typed is just the user tapping elsewhere, not an error.
+      if (!next) return;
+      const res = createCategory(next);
+      if (res !== true) { showToast(res); return; }
+      if (catCreateTag === "home") { state.categoryTags[next] = "home"; save(); }
+      catEditCat = next;
+      // Deliberately no renderCategoryEditSheet() here: this runs inside a blur handler
+      // fired by mousedown on, say, the Type chip the user is mid-tap on. Rebuilding that
+      // chip's DOM out from under the same gesture can drop the click that triggered the
+      // blur in the first place. The chip's own onclick reads catEditCat live, so the
+      // existing (unrebuilt) elements already handle the just-created category correctly.
+      return;
+    }
+
+    if (next === cat) { catEditName.value = cat; return; }
+    const res = renameCategory(cat, next);
+    if (res !== true) { showToast(res); catEditName.value = cat; return; }
+    catEditCat = next;
   }
 
   // ---- Single-page render: one collapsible section per category ----
@@ -1059,7 +1213,7 @@
       const p = document.createElement("div");
       p.className = "empty-all";
       p.innerHTML = "Nothing in " + (viewMode === "home" ? "Home" : "Work") +
-        ".<br>Move a category over in Organize categories.";
+        ".<br>Switch a category's type from its edit sheet to bring one over.";
       scroll.appendChild(p);
       return;
     }
@@ -1071,13 +1225,21 @@
       const section = document.createElement("div");
       section.className = "section" + (isCollapsed ? " collapsed" : "") + " tag-" + tagOf(cat);
 
-      // Header: tap to toggle collapse (category management lives in the organize sheet)
+      // Header: the caret toggles collapse; tapping the rest of the bar opens the
+      // category edit sheet (rename, type, archive, delete, reorder).
       const head = document.createElement("div");
       head.className = "sec-head";
 
       const caret = document.createElement("span");
       caret.className = "sec-caret";
       caret.innerHTML = '<svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M1 3.5h10L6 9.5z"/></svg>';
+      caret.setAttribute("aria-label", "Toggle " + cat);
+      caret.onclick = function (e) {
+        e.stopPropagation();
+        collapsed[cat] = !collapsed[cat];
+        saveCollapsed();
+        section.classList.toggle("collapsed");
+      };
 
       const title = document.createElement("span");
       title.className = "sec-title";
@@ -1095,9 +1257,7 @@
       head.append(caret, title, addBtn);
 
       head.onclick = function () {
-        collapsed[cat] = !collapsed[cat];
-        saveCollapsed();
-        section.classList.toggle("collapsed");
+        openCategoryEditSheet(cat);
       };
 
       section.appendChild(head);
@@ -1228,18 +1388,18 @@
   // Renders the category and tag chip pickers based on the current sheetCtx selection.
   function renderSheetChips() {
     sheetCats.innerHTML = "";
-    state.categories.forEach(function (cat) {
+    state.categories.filter(function (cat) { return !isArchived(cat); }).forEach(function (cat) {
       const chip = document.createElement("button");
       chip.className = "chip" + (sheetCtx.cat === cat ? " selected" : "");
       chip.textContent = cat;
       chip.onclick = function () { sheetCtx.cat = cat; renderSheetChips(); updateSaveEnabled(); };
       sheetCats.appendChild(chip);
     });
-    // "New category" chip opens the organize sheet
+    // "+ New" chip opens the category edit sheet in create mode
     const addChip = document.createElement("button");
     addChip.className = "chip chip-add";
-    addChip.textContent = "\uFF0B New category";
-    addChip.onclick = function () { openCatSheet(); };
+    addChip.textContent = "\uFF0B New";
+    addChip.onclick = function () { openCategoryCreateSheet(); };
     sheetCats.appendChild(addChip);
 
     sheetTags.innerHTML = "";
@@ -1394,6 +1554,7 @@
     if (st.categories.length === 0) return null;
     if (!st.active || st.categories.indexOf(st.active) === -1) st.active = st.categories[0];
     if (!st.categoryTags || typeof st.categoryTags !== "object") st.categoryTags = {};
+    if (!st.categoryArchived || typeof st.categoryArchived !== "object") st.categoryArchived = {};
     return st;
   }
 
@@ -1434,31 +1595,37 @@
     return n;
   }
 
-  // Moves completed tasks out of state into the archive (rather than deleting them).
+  // Moves a single category's completed tasks out of state.tasks into the archive (rather
+  // than deleting them), leaving undone tasks in place. Shared by archiveDone (sweeps every
+  // category) and archiveCategory (sweeps one, after confirming nothing undone remains).
+  function sweepDoneTasks(cat) {
+    const tasks = state.tasks[cat] || [];
+    const remaining = [];
+    let archived = 0;
+    const now = new Date().toISOString();
+    tasks.forEach(function (t) {
+      if (t.done) {
+        archive.push({
+          text: t.text,
+          tag: t.tag || null,
+          category: cat,
+          createdAt: t.createdAt || null,
+          completedAt: t.completedAt || now,
+          archivedAt: now
+        });
+        archived++;
+      } else {
+        remaining.push(t);
+      }
+    });
+    state.tasks[cat] = remaining;
+    return archived;
+  }
+
   // Single-page view has no active category, so this sweeps completed tasks across all categories.
   function archiveDone() {
     let archived = 0;
-    const now = new Date().toISOString();
-    state.categories.forEach(function (cat) {
-      const tasks = state.tasks[cat] || [];
-      const remaining = [];
-      tasks.forEach(function (t) {
-        if (t.done) {
-          archive.push({
-            text: t.text,
-            tag: t.tag || null,
-            category: cat,
-            createdAt: t.createdAt || null,
-            completedAt: t.completedAt || now,
-            archivedAt: now
-          });
-          archived++;
-        } else {
-          remaining.push(t);
-        }
-      });
-      state.tasks[cat] = remaining;
-    });
+    state.categories.forEach(function (cat) { archived += sweepDoneTasks(cat); });
     save();
     if (archived) saveArchive();
     render();
@@ -1534,11 +1701,32 @@
   document.getElementById("archive-done-btn").onclick = menuAction(archiveDone);
 
   // Organize-categories sheet controls
-  catAddBtn.onclick = addFromCatSheet;
-  catNewInput.addEventListener("input", updateCatAddEnabled);
-  catNewInput.addEventListener("keydown", function (e) { if (e.key === "Enter" && !catAddBtn.disabled) addFromCatSheet(); });
   catDoneBtn.onclick = closeCatSheet;
   catBackdrop.onclick = closeCatSheet;
+
+  // Category edit sheet controls
+  catEditName.onblur = commitCategoryEditName;
+  catEditName.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); catEditName.blur(); }
+  });
+  // Closes the sheet on move (rather than re-rendering in place, like the other
+  // fields) so the reordering is visible on the main screen right away.
+  catEditMoveUp.onclick = function () { moveCategoryUp(catEditCat); closeCategoryEditSheet(); };
+  catEditMoveDown.onclick = function () { moveCategoryDown(catEditCat); closeCategoryEditSheet(); };
+  catEditMoveTop.onclick = function () { moveCategoryToTop(catEditCat); closeCategoryEditSheet(); };
+  // Closes on click regardless of outcome — the toast sits behind the sheet
+  // (z-index), so leaving it open on failure would hide the error message.
+  catEditArchiveBtn.onclick = function () {
+    const cat = catEditCat;
+    const res = archiveCategory(cat);
+    closeCategoryEditSheet();
+    showToast(res === true ? '"' + cat + '" archived' : res);
+  };
+  catEditDeleteBtn.onclick = function () {
+    if (confirmAndDeleteCategory(catEditCat)) closeCategoryEditSheet();
+  };
+  catEditDoneBtn.onclick = closeCategoryEditSheet;
+  catEditBackdrop.onclick = closeCategoryEditSheet;
 
   // Catches the case where a restored backup already carries an over-threshold archive.
   checkArchiveThreshold();

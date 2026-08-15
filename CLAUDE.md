@@ -137,12 +137,79 @@ Delivered and in active use:
 - The "Pending" tag reads **Wait** — `label: "Wait"`, badge `short: "WAIT"`
   (uppercase to match PRIO/QUICK). The stored tag id is still `pending`, so
   existing tasks and old JSON backups need no migration.
+- Archive categories: categories stand in for work projects, and when a
+  project finishes it comes off the main view without being deleted —
+  projects come back to life, so this is archive-and-restore. A category can
+  only be archived once it has **no unfinished tasks**; archiving sweeps its
+  remaining (all completed) tasks into `todos.v2.archive` via the same path
+  as "Archive done," then sets a flag. Shape: a sparse
+  `categoryArchived: { "Project X": true }` map inside `state`, alongside
+  `categoryTags`. The category never leaves `state.categories`, so restoring
+  is just clearing the flag — it lands back at its original position for
+  free. The "keep at least one category" guard applies to archiving too
+  (counting only non-archived categories). Every iteration over
+  `state.categories` that feeds the main view has to skip archived
+  entries — `displayCategories()`, the creation sheet's chip picker.
+- Archive category-rename drift fixed: `renameCategory` now backfills
+  matching `category` fields in `todos.v2.archive`, so renaming a category
+  carries its archived history with it instead of splitting it across the
+  old and new names.
+- Category edit sheet, opened by tapping a category bar on the main page:
+  rename, switch Home/Work type, reorder (Up/Down/Top), archive, delete —
+  all the category-management actions, scoped to one category, without
+  leaving the main view. Tapping the bar used to toggle collapse/expand;
+  that's now the caret's job alone (enlarged to a 28px tap target, since it's
+  the only remaining hit zone for a gesture used every day), and the rest of
+  the bar opens the edit sheet instead.
+
+  Everything here applies immediately (rename on blur/Enter, type/archive/
+  delete/move on tap) — there's no Save button, just Done to close. Up/Down/
+  Top reorder relative to the category's **displayed neighbors** (same Home/
+  Work tag, not archived) rather than raw array position, via a
+  `swapCategories`/`categoryNeighbors` pair: `state.categories` can have the
+  other tag's categories interleaved between two same-tag ones, so stepping
+  by raw index could silently reorder categories in the *other* mode as a
+  side effect, or produce no visible change at all. The buttons disable
+  themselves at the top/bottom of that same-tag list rather than no-op
+  silently. Delete's confirm-with-task-count logic lives in
+  `confirmAndDeleteCategory()`.
+
+  The same sheet also handles **creating** a category: the task sheet's
+  category chip picker has a "＋ New" chip (shortened from "＋ New category")
+  that opens it with `catEditIsNew` set, hiding Order/Delete/Archive (nothing
+  to reorder, delete, or archive before the category exists) and defaulting
+  Type to Work. The name field IS the create action — typing a name and
+  blurring calls `createCategory()` instead of `renameCategory()`, tracked by
+  `catEditCat` being `null` beforehand. Closing the sheet re-renders the task
+  sheet's chips (if one's open behind it) so a freshly created category shows
+  up as a pick right away. Stacks above the task sheet at the same elevated
+  z-index tier the Organize sheet uses.
+
+  **Gotcha that cost a debugging pass:** the Type chips' `onclick` must read
+  `catEditCat` live, not close over the `cat` render-time constant — and
+  `commitCategoryEditName()`'s create-success path must *not* call
+  `renderCategoryEditSheet()`. Tapping a Type chip fires mousedown first,
+  which blurs the name field and (on the first tap after typing) creates the
+  category synchronously, *before* the chip's own click handler runs. If that
+  blur handler rebuilds the chip DOM, the real click event — dispatched by
+  actual touch/mouse, not a synthetic `.click()` — silently fails to land on
+  the replacement element, so the tag tap is dropped with no error. Leaving
+  the existing chip elements alone and reading state fresh at click time
+  sidesteps the whole race.
+- Organize Categories sheet — relabeled **"Restore categories"** in the
+  hamburger menu — is now restore-only. Renaming, retagging, reordering,
+  archiving, and deleting all moved to the category edit sheet above, so the
+  only thing left here is the archived-categories list with a Restore button
+  per row. No more inline rename inputs, drag-to-reorder, or an add-new-
+  category row; `renderCatList()` shows "No archived categories." when empty.
 
 ## Backlog (build individually, in priority order)
 
 1. **Reorganize categories on the home page** — reorder categories directly
    in the main single-page view (drag-to-reorder in place), rather than only
-   via the separate Organize Categories sheet.
+   via the separate Organize Categories sheet. Partially covered by the
+   category edit sheet's Up/Down/Top buttons (tap the bar, no separate sheet
+   needed) — true drag-in-place is still open if that's still wanted.
 2. **Recurring tasks** — on app launch, check the recurring-tasks list and add
    any that are due; track each recurring task's last-added date in
    localStorage to determine when it's due again.
@@ -153,52 +220,14 @@ Delivered and in active use:
    2. iPhone: keyboard sometimes doesn't dismiss after a task is saved.
       Repro: happens when hitting the blue checkmark/return key on the
       keyboard rather than tapping away.
+   3. Toast messages are invisible while a sheet is open — `.toast` is
+      `z-index: 50` but `.sheet`/`.sheet-backdrop` are `61`, so a toast
+      triggered from inside the create/edit or Organize Categories sheet
+      (e.g. the "keep at least one category" guard) renders behind it.
+      Found while building category archiving.
 5. **Exercise tracker** — archiving now exists, so this is unblocked. Track
    past exercises; long-term, show a GitHub-contributions-style calendar
    checklist of exercise history.
-6. **Organize-sheet "New category" input truncates** its placeholder to
-   "New category nam" — it shares a row with the Add button and gets too
-   narrow. Pre-dates the sheet restyle. Either shorten the placeholder or
-   move Add onto its own row.
-7. **Archive categories** — categories stand in for work projects; when a
-   project finishes the category should come off the main view, but projects
-   come back to life, so this is archive-and-restore, not delete. Restore
-   lives in the Organize Categories sheet.
-
-   **A category can only be archived once it has no unfinished tasks.** That
-   rule is what keeps the design small — there is no task payload to move, so
-   no second store is needed. Archive is: refuse if any task is undone; sweep
-   the remaining (all completed) tasks into `todos.v2.archive` via the same
-   path as "Archive done"; then set a flag. Restore clears the flag.
-
-   Shape decided: a sparse `categoryArchived: { "Project X": true }` map
-   inside `state`, alongside `categoryTags`. The category never leaves
-   `state.categories`, which buys three things for free — export/restore
-   works untouched (`exportJson` serializes `state` wholesale), the existing
-   `addCategory` duplicate check already blocks reusing an archived name, and
-   restoring puts the category back at its original position in the order.
-
-   The real cost is that every iteration over `state.categories` has to skip
-   archived entries — render, mode ordering, the creation sheet's chip
-   picker, the per-category add shortcut. Miss one and an archived category
-   surfaces somewhere unexpected.
-
-   Still to handle when building: the duplicate-name message ("Category
-   already exists") is confusing for a name you can't see, so it needs to say
-   the category is archived; archiving wants the same "keep at least one
-   category" guard `deleteCategory` has; and archived categories need a
-   section in the Organize Categories sheet to restore from, with rename
-   presumably disabled there (see #8).
-8. **Archive loses track of renamed categories** — `renameCategory` remaps
-   `state.tasks` and `categoryTags` but never touches `todos.v2.archive`, so
-   archived tasks keep the category name they had when archived. Rename a
-   category and its history splits into two groups under the old and new
-   names. Harmless while the archive is write-only; breaks the
-   grouped-by-category archive viewer, and the drift compounds the longer it
-   goes unfixed. Fix: backfill matching `category` fields in the archive on
-   rename. Related: once #7 lands, an archived category's whole history is
-   keyed by its name, so renaming one from the Organize sheet should either
-   carry the archive with it or be disabled outright.
 
 ### Parked / long-term
 
@@ -206,12 +235,13 @@ Delivered and in active use:
   basic tracker first, calendar view later).
 - Archive viewer — a way to browse/search archived (completed) tasks in-app,
   **grouped by category and sorted by date**. The data is already there: every
-  entry `archiveDone()` writes carries `category`, `createdAt`, `completedAt`
-  and `archivedAt`, so no model change is needed — but see #8, renames
-  currently fracture a category's history into two groups. Today the archive
-  is write-only, populated by "Archive done" and only inspectable via JSON
-  export. Still needs a decision on where the viewer lives (new sheet? filter
-  within the existing category view?) before building.
+  entry `archiveDone()`/`archiveCategory()` writes carries `category`,
+  `createdAt`, `completedAt` and `archivedAt`, so no model change is needed,
+  and category renames no longer fracture a category's history (see Current
+  state). Today the archive is write-only, populated by "Archive done" and
+  "Archive category," and only inspectable via JSON export. Still needs a
+  decision on where the viewer lives (new sheet? filter within the existing
+  category view?) before building.
 
 ## Testing (planned)
 

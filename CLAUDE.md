@@ -350,6 +350,8 @@ model, and API-vs-email for the side project.
       triggered from inside the create/edit or Organize Categories sheet
       (e.g. the "keep at least one category" guard) renders behind it.
       Found while building category archiving.
+   4. iPhone: when switching modes (Work/Home), the top part of the task
+      list is covered by the screen's mode-selection buttons.
 4. **Exercise tracker** — now planned as a full Exercise screen; see Future
    screens. Gets its own store rather than deriving from the todo archive.
 5. **Archive viewer** — a way to browse/search archived (completed) tasks

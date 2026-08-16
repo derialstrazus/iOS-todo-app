@@ -355,11 +355,14 @@
   #sheet-save { flex: 2; }
   /* Category edit sheet's action row follows the same pattern: .sheet-btn.danger
      defaults to flex: 0 0 auto (text-only, no fill for the notch to cut), so Delete
-     needs its own flex override to share the row evenly with Archive. */
+     needs its own flex override to share the row evenly with Archive and Done. */
   #cat-edit-delete { flex: 1; }
   /* Up / Down / Top: three equal-width buttons, no extra top margin since the
      field-label above it already provides spacing (unlike .sheet-actions). */
   .cat-edit-move-row { display: flex; gap: 8px; }
+  /* Now sits under its own "Finalize" field-label like the Order row above, so
+     .sheet-actions' default margin-top would double up on the label's spacing. */
+  #cat-edit-manage-actions { margin-top: 0; }
 
   /* Hamburger dropdown menu */
   .menu-btn { margin-left: auto; }
@@ -433,12 +436,11 @@
   }
   .section.tag-home .sec-head { border-left-color: var(--home); }
   .section.tag-work .sec-head { border-left-color: var(--work); }
-  /* Sized well past the 9px glyph — this is now the only part of the bar that still
-     toggles collapse (tapping the rest opens the category edit sheet), so it needs a
-     real touch target rather than the icon's own tiny footprint. */
+  /* Purely decorative now — the whole bar toggles collapse, so the caret no longer
+     needs its own oversized touch target. */
   .sec-caret {
     color: var(--acc);
-    width: 28px; height: 28px;
+    width: 18px; height: 18px;
     flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     transition: transform 0.15s ease;
@@ -459,6 +461,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Opens the category edit sheet — plain icon, not a filled circle like .sec-add,
+     so it doesn't compete with the "+" as the bar's primary action. */
+  .sec-menu {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border: none;
+    background: none;
+    color: var(--ink-2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sec-menu svg { width: 15px; height: 15px; display: block; }
+  .sec-menu:active { color: var(--acc); }
   .sec-add {
     flex-shrink: 0;
     width: 22px; height: 22px;
@@ -663,13 +677,13 @@
       </div>
     </div>
 
-    <div class="sheet-actions" id="cat-edit-manage-actions">
-      <button class="sheet-btn danger" id="cat-edit-delete">Delete</button>
-      <button class="sheet-btn secondary" id="cat-edit-archive">Archive</button>
-    </div>
-
-    <div class="sheet-actions">
-      <button class="sheet-btn secondary" id="cat-edit-done">Done</button>
+    <div class="field">
+      <span class="field-label">Finalize</span>
+      <div class="sheet-actions" id="cat-edit-manage-actions">
+        <button class="sheet-btn danger" id="cat-edit-delete">Delete</button>
+        <button class="sheet-btn secondary" id="cat-edit-archive">Archive</button>
+        <button class="sheet-btn primary" id="cat-edit-done">Done</button>
+      </div>
     </div>
   </div>
 
@@ -709,7 +723,6 @@
   const catEditMoveUp = document.getElementById("cat-edit-move-up");
   const catEditMoveDown = document.getElementById("cat-edit-move-down");
   const catEditMoveTop = document.getElementById("cat-edit-move-top");
-  const catEditManageActions = document.getElementById("cat-edit-manage-actions");
   const catEditArchiveBtn = document.getElementById("cat-edit-archive");
   const catEditDeleteBtn = document.getElementById("cat-edit-delete");
   const catEditDoneBtn = document.getElementById("cat-edit-done");
@@ -829,18 +842,14 @@
     try { localStorage.setItem(MODE_KEY, viewMode); } catch (e) {}
   }
 
-  // Switching mode expands everything in the mode you're switching to, so the list you
-  // asked for is open when you get there. Tapping the mode you're already in is a no-op
-  // rather than a clear — clearing would leave nothing to show, and a stray tap would
-  // otherwise undo whatever you'd collapsed by hand. Category order is never mutated.
+  // Switching mode leaves each category's collapse state as you left it. Tapping the
+  // mode you're already in is a no-op rather than a clear — clearing would leave
+  // nothing to show, and a stray tap would otherwise undo whatever you'd collapsed by
+  // hand. Category order is never mutated.
   function setViewMode(next) {
     if (viewMode === next) return;
     viewMode = next;
-    state.categories.forEach(function (c) {
-      if (tagOf(c) === next) collapsed[c] = false;
-    });
     saveViewMode();
-    saveCollapsed();
     render();
   }
 
@@ -1192,7 +1201,8 @@
     const cat = catEditCat;
 
     catEditOrderField.style.display = catEditIsNew ? "none" : "";
-    catEditManageActions.style.display = catEditIsNew ? "none" : "";
+    catEditDeleteBtn.style.display = catEditIsNew ? "none" : "";
+    catEditArchiveBtn.style.display = catEditIsNew ? "none" : "";
     catEditName.placeholder = catEditIsNew ? "New category name" : "";
     catEditName.value = cat || "";
 
@@ -1305,7 +1315,7 @@
       const section = document.createElement("div");
       section.className = "section" + (isCollapsed ? " collapsed" : "") + " tag-" + tagOf(cat);
 
-      // Header: the caret toggles collapse; tapping the rest of the bar opens the
+      // Header: tapping the bar toggles collapse; the menu button opens the
       // category edit sheet (rename, type, archive, delete, reorder).
       const head = document.createElement("div");
       head.className = "sec-head";
@@ -1313,17 +1323,19 @@
       const caret = document.createElement("span");
       caret.className = "sec-caret";
       caret.innerHTML = '<svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M1 3.5h10L6 9.5z"/></svg>';
-      caret.setAttribute("aria-label", "Toggle " + cat);
-      caret.onclick = function (e) {
-        e.stopPropagation();
-        collapsed[cat] = !collapsed[cat];
-        saveCollapsed();
-        section.classList.toggle("collapsed");
-      };
 
       const title = document.createElement("span");
       title.className = "sec-title";
       title.textContent = cat;
+
+      const menuBtn = document.createElement("button");
+      menuBtn.className = "sec-menu";
+      menuBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
+      menuBtn.setAttribute("aria-label", "Edit " + cat);
+      menuBtn.onclick = function (e) {
+        e.stopPropagation();
+        openCategoryEditSheet(cat);
+      };
 
       const addBtn = document.createElement("button");
       addBtn.className = "sec-add";
@@ -1334,10 +1346,12 @@
         openCreate(cat);
       };
 
-      head.append(caret, title, addBtn);
+      head.append(caret, title, menuBtn, addBtn);
 
       head.onclick = function () {
-        openCategoryEditSheet(cat);
+        collapsed[cat] = !collapsed[cat];
+        saveCollapsed();
+        section.classList.toggle("collapsed");
       };
 
       section.appendChild(head);

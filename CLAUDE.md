@@ -19,6 +19,22 @@ for family responsibilities.
   a deliberate constraint, not a gap to fill.
 - **Theme:** dark, styled to feel native on iOS.
 
+## Version
+
+**Current: `v23`, bumped 2026-08-17.** Shown in the app's About sheet
+(hamburger menu → About) alongside the same date, from the `APP_VERSION`/
+`APP_UPDATED` consts near the top of `index.html`'s `<script>`.
+
+A rolling integer, not a git commit hash (a hash can't be known until
+after the commit that would contain it exists, which forced an awkward
+separate "bump" commit). Started at 23, not 1 — that's how many prior
+commits had touched `index.html` as of the commit that introduced this
+counter, so it reflects the app's real edit history rather than resetting
+it. On **every code edit** — not just feature work, any change to
+`index.html` — increment `APP_VERSION` by 1, set `APP_UPDATED` to today,
+and update the line above to match, all in the **same commit** as the edit
+itself.
+
 ## Hard constraints
 
 - **Keep it a single self-contained `index.html`.** If a change would benefit
@@ -289,6 +305,14 @@ further down). When in doubt, the code wins:
   plain `position: fixed` ancestor (no `transform`) isn't a containing block
   for its own fixed descendants, so they still resolve against the viewport
   directly, same as before.
+- About sheet: a new "About" item at the bottom of the hamburger menu (past
+  a separator, after "Archive done") opens a sheet showing the app's
+  version and last-updated date — read-only, no editable state, so it's
+  just two `.about-value` rows (a plain-text variant of the input-box panel
+  look) and a Done button. Shares the elevated z-index tier with the
+  Organize and category-edit sheets, since all three are reachable only
+  from the hamburger menu and never open at once. See the Version section
+  above for what the stamp means and how it's kept current.
 
 ## Future screens (long-term plan)
 

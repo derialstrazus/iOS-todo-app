@@ -269,6 +269,15 @@
     resize: vertical;
     min-height: 44px;
   }
+  /* Read-only info row for the About sheet — same panel look as a text input,
+     minus the interactive chrome, since there's nothing to type here. */
+  .about-value {
+    background: linear-gradient(180deg, var(--pan-a), var(--pan-b));
+    border: 1px solid var(--row-line);
+    padding: 13px 14px;
+    color: var(--text);
+    font-size: 15px;
+  }
 
   /* Chip rows for category + tag pickers */
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -291,11 +300,11 @@
 
   /* Elevated tier: the category edit sheet stacks above the create/edit task sheet
      when opened from its "+ New" chip (harmless when opened standalone from the main
-     page, since nothing else is open underneath there). The Organize sheet, reachable
-     only from the hamburger menu, never overlaps the task sheet either, but shares
-     this tier since the two are never open at the same time. */
-  #cat-backdrop, #cat-edit-backdrop { z-index: 80; }
-  #cat-sheet, #cat-edit-sheet { z-index: 81; }
+     page, since nothing else is open underneath there). The Organize and About
+     sheets, reachable only from the hamburger menu, never overlap the task sheet
+     either, but share this tier since none of the three are ever open at once. */
+  #cat-backdrop, #cat-edit-backdrop, #about-backdrop { z-index: 80; }
+  #cat-sheet, #cat-edit-sheet, #about-sheet { z-index: 81; }
 
   .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
 
@@ -636,6 +645,8 @@
     <button class="menu-item" id="import-btn" role="menuitem">↑ Restore backup</button>
     <div class="menu-sep"></div>
     <button class="menu-item" id="archive-done-btn" role="menuitem">🗄 Archive done</button>
+    <div class="menu-sep"></div>
+    <button class="menu-item" id="about-btn" role="menuitem">About</button>
   </div>
 
   <div class="scroll" id="scroll"></div>
@@ -723,9 +734,38 @@
     </div>
   </div>
 
+  <div class="sheet-backdrop" id="about-backdrop"></div>
+  <div class="sheet" id="about-sheet" role="dialog" aria-modal="true">
+    <div class="sheet-grip"></div>
+
+    <div class="field">
+      <span class="field-label">Version</span>
+      <div class="about-value" id="about-version"></div>
+    </div>
+
+    <div class="field">
+      <span class="field-label">Last updated</span>
+      <div class="about-value" id="about-updated"></div>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="sheet-btn secondary" id="about-done-btn">Done</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
 <script>
+  // Shown in the About sheet (hamburger menu). A rolling integer, not a git hash —
+  // bump by 1 and set APP_UPDATED to today on every code edit, in the same commit
+  // as the edit itself (see the Version section in CLAUDE.md, which must be updated
+  // to match in that same commit). Started at 23 rather than 1: that's how many
+  // prior commits had already touched index.html (`git log --oneline -- index.html`)
+  // as of the commit that introduced this counter, so the number reflects the app's
+  // real edit history instead of resetting it to zero.
+  const APP_VERSION = 23;
+  const APP_UPDATED = "2026-08-17";
+
   const KEY = "todos.v2";
 
   const scroll = document.getElementById("scroll");
@@ -763,6 +803,13 @@
   const catEditArchiveBtn = document.getElementById("cat-edit-archive");
   const catEditDeleteBtn = document.getElementById("cat-edit-delete");
   const catEditDoneBtn = document.getElementById("cat-edit-done");
+
+  // About sheet — static version/timestamp display, no editable state
+  const aboutSheet = document.getElementById("about-sheet");
+  const aboutBackdrop = document.getElementById("about-backdrop");
+  const aboutVersionEl = document.getElementById("about-version");
+  const aboutUpdatedEl = document.getElementById("about-updated");
+  const aboutDoneBtn = document.getElementById("about-done-btn");
 
   // Available tags. `short` is what shows on the task row as a dog-eared badge;
   // `label` is the full name used in the picker and for accessibility.
@@ -1135,6 +1182,19 @@
     // reflect any changes on the main list and, if the create/edit sheet is open, its chips
     render();
     if (sheetCtx) renderSheetChips();
+  }
+
+  // ---- About sheet ----
+  function openAboutSheet() {
+    aboutVersionEl.textContent = "v" + APP_VERSION;
+    aboutUpdatedEl.textContent = APP_UPDATED;
+    aboutBackdrop.classList.add("open");
+    aboutSheet.classList.add("open");
+  }
+
+  function closeAboutSheet() {
+    aboutSheet.classList.remove("open");
+    aboutBackdrop.classList.remove("open");
   }
 
   function renderCatList() {
@@ -1904,10 +1964,15 @@
   document.getElementById("export-btn").onclick = menuAction(exportJson);
   document.getElementById("import-btn").onclick = menuAction(importJson);
   document.getElementById("archive-done-btn").onclick = menuAction(archiveDone);
+  document.getElementById("about-btn").onclick = menuAction(openAboutSheet);
 
   // Organize-categories sheet controls
   catDoneBtn.onclick = closeCatSheet;
   catBackdrop.onclick = closeCatSheet;
+
+  // About sheet controls
+  aboutDoneBtn.onclick = closeAboutSheet;
+  aboutBackdrop.onclick = closeAboutSheet;
 
   // Category edit sheet controls
   catEditName.onblur = commitCategoryEditName;

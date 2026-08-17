@@ -122,7 +122,17 @@
     display: flex;
     flex-direction: column;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    height: 100%;
+    /* position: fixed + inset: 0 instead of height: 100% — pins body to the actual
+       visual viewport. touch-action: manipulation above wasn't enough on its own:
+       iOS can still desync the layout viewport's height from the visual one after
+       a double-tap, and height: 100% bakes in whatever that stale value was,
+       leaving a gap below the last row. Fixed positioning re-reads the real
+       viewport bounds instead of trusting a percentage that can go stale. Doesn't
+       change where .fab/.menu/.sheet/etc. anchor — a plain position: fixed
+       ancestor (no transform) isn't a containing block for its own fixed children,
+       so they still resolve against the viewport exactly as before. */
+    position: fixed;
+    inset: 0;
     background:
       radial-gradient(ellipse 120% 55% at 78% -6%, var(--sky), transparent 62%),
       linear-gradient(196deg, var(--bg-a) 0%, var(--bg-b) 46%, var(--bg-c) 100%);
@@ -1851,6 +1861,14 @@
   sheetText.addEventListener("input", updateSaveEnabled);
   sheetText.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && !sheetSave.disabled) saveSheet();
+  });
+  // Comment is a textarea, so Enter would normally insert a newline — preventDefault
+  // to save instead, matching Task's behavior, at the cost of no multi-line entry.
+  sheetComment.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !sheetSave.disabled) {
+      e.preventDefault();
+      saveSheet();
+    }
   });
 
   // ---- Hamburger menu ----

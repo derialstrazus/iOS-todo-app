@@ -262,18 +262,33 @@ further down). When in doubt, the code wins:
   doesn't blow out row height; opening the row's edit sheet shows the full
   text. `.label` needs `min-width: 0` for that ellipsis to actually take
   effect, since a flex item won't shrink past its content's intrinsic width
-  otherwise.
-- Three iPhone bug fixes from the backlog: `html, body` now sets
-  `touch-action: manipulation`, since iOS Safari could still fire its
-  built-in double-tap-to-zoom gesture despite the viewport meta's
-  `user-scalable=no`, which threw off scroll/layout metrics afterward (the
-  extra gap below the last row). `closeSheet()` now blurs `sheetText` and
-  `sheetComment` before closing — tapping the backdrop blurred the focused
-  field for free, but saving via the keyboard's Return/checkmark key closed
-  the sheet programmatically without ever blurring, so iOS left its keyboard
-  up. And `setViewMode()` now resets `scroll.scrollTop` to 0, so switching
-  Work/Home always lands at the top of the new list instead of keeping
-  whatever scroll position the previous mode was left at.
+  otherwise. Enter in the Comment field saves the sheet, same as Task —
+  `sheetComment`'s `keydown` handler calls `preventDefault()` so Enter
+  doesn't also insert a newline first. Deliberate trade: no multi-line entry
+  via Return, chosen over a textarea that silently swallowed Enter (was
+  logged as "no blue checkmark save" — expected checkmark-saves behavior
+  like every other field, not textarea's default newline).
+- Three iPhone bug fixes from the backlog. `closeSheet()` now blurs
+  `sheetText` and `sheetComment` before closing — tapping the backdrop
+  blurred the focused field for free, but saving via the keyboard's
+  Return/checkmark key closed the sheet programmatically without ever
+  blurring, so iOS left its keyboard up. `setViewMode()` now resets
+  `scroll.scrollTop` to 0, so switching Work/Home always lands at the top of
+  the new list instead of keeping whatever scroll position the previous mode
+  was left at. The double-tap gap took two passes: `touch-action:
+  manipulation` on `html, body` (to skip iOS Safari's built-in
+  double-tap-to-zoom gesture) wasn't enough on its own — confirmed still
+  reproducing on a real iPhone. The actual fix was swapping `body`'s
+  `height: 100%` for `position: fixed; inset: 0`. Theory: `height: 100%`
+  bakes in whatever the layout viewport's height was at layout time, and iOS
+  can desync that from the true visual viewport after a double-tap even when
+  the zoom gesture itself is suppressed, leaving a gap below the last row
+  where `body`'s box falls short of the real screen bottom. `position: fixed`
+  re-reads the actual viewport bounds instead of trusting a stale
+  percentage. Doesn't change where `.fab`/`.menu`/`.sheet`/etc. anchor — a
+  plain `position: fixed` ancestor (no `transform`) isn't a containing block
+  for its own fixed descendants, so they still resolve against the viewport
+  directly, same as before.
 
 ## Future screens (long-term plan)
 

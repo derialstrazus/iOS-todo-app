@@ -112,6 +112,11 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     height: 100%;
     overscroll-behavior: none;
+    /* iOS Safari can still fire its built-in double-tap-to-zoom gesture even with
+       the viewport meta's user-scalable=no, which leaves layout/scroll metrics
+       off afterward (the extra gap at the bottom of the list). touch-action:
+       manipulation tells the browser to skip that gesture entirely. */
+    touch-action: manipulation;
   }
   body {
     display: flex;
@@ -873,6 +878,7 @@
     viewMode = next;
     saveViewMode();
     render();
+    scroll.scrollTop = 0;
   }
 
   // The mode is a filter: only its own, non-archived categories are on screen, in saved order.
@@ -1568,6 +1574,11 @@
   }
 
   function closeSheet() {
+    // Tapping the backdrop blurs the focused field for free, but saving via the
+    // keyboard's Return/checkmark key closes the sheet programmatically without
+    // ever blurring — iOS then leaves its keyboard up since focus never moved.
+    sheetText.blur();
+    sheetComment.blur();
     sheet.classList.remove("open");
     sheetBackdrop.classList.remove("open");
     sheetCtx = null;

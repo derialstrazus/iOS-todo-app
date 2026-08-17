@@ -263,6 +263,17 @@ further down). When in doubt, the code wins:
   text. `.label` needs `min-width: 0` for that ellipsis to actually take
   effect, since a flex item won't shrink past its content's intrinsic width
   otherwise.
+- Three iPhone bug fixes from the backlog: `html, body` now sets
+  `touch-action: manipulation`, since iOS Safari could still fire its
+  built-in double-tap-to-zoom gesture despite the viewport meta's
+  `user-scalable=no`, which threw off scroll/layout metrics afterward (the
+  extra gap below the last row). `closeSheet()` now blurs `sheetText` and
+  `sheetComment` before closing — tapping the backdrop blurred the focused
+  field for free, but saving via the keyboard's Return/checkmark key closed
+  the sheet programmatically without ever blurring, so iOS left its keyboard
+  up. And `setViewMode()` now resets `scroll.scrollTop` to 0, so switching
+  Work/Home always lands at the top of the new list instead of keeping
+  whatever scroll position the previous mode was left at.
 
 ## Future screens (long-term plan)
 
@@ -363,22 +374,9 @@ model, and API-vs-email for the side project.
 1. **Recurring tasks** — on app launch, check the recurring-tasks list and add
    any that are due; track each recurring task's last-added date in
    localStorage to determine when it's due again.
-2. **Bug fixes:**
-   1. iPhone: extra gap at the bottom of the screen, below the last row.
-      Repro: happens after double-tapping the page.
-   2. iPhone: keyboard sometimes doesn't dismiss after a task is saved.
-      Repro: happens when hitting the blue checkmark/return key on the
-      keyboard rather than tapping away.
-   3. Toast messages are invisible while a sheet is open — `.toast` is
-      `z-index: 50` but `.sheet`/`.sheet-backdrop` are `61`, so a toast
-      triggered from inside the create/edit or Organize Categories sheet
-      (e.g. the "keep at least one category" guard) renders behind it.
-      Found while building category archiving.
-   4. iPhone: when switching modes (Work/Home), the top part of the task
-      list is covered by the screen's mode-selection buttons.
-3. **Exercise tracker** — now planned as a full Exercise screen; see Future
+2. **Exercise tracker** — now planned as a full Exercise screen; see Future
    screens. Gets its own store rather than deriving from the todo archive.
-4. **Archive viewer** — a way to browse/search archived (completed) tasks
+3. **Archive viewer** — a way to browse/search archived (completed) tasks
    in-app, **grouped by category and sorted by date**. The data is already
    there: every entry `archiveDone()`/`archiveCategory()` writes carries
    `category`, `createdAt`, `completedAt` and `archivedAt`, so no model

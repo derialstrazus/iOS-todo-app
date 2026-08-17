@@ -239,7 +239,7 @@
     text-transform: uppercase;
     letter-spacing: 0.19em;
   }
-  .sheet input[type="text"] {
+  .sheet input[type="text"], .sheet textarea {
     width: 100%;
     background: linear-gradient(180deg, var(--pan-a), var(--pan-b));
     border: 1px solid var(--row-line);
@@ -248,7 +248,12 @@
     font-size: 16px;
     outline: none;
   }
-  .sheet input[type="text"]:focus { border-color: var(--acc); }
+  .sheet input[type="text"]:focus, .sheet textarea:focus { border-color: var(--acc); }
+  .sheet textarea {
+    font-family: inherit;
+    resize: vertical;
+    min-height: 44px;
+  }
 
   /* Chip rows for category + tag pickers */
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -531,8 +536,19 @@
     line-height: 1;
     font-weight: 700;
   }
-  .label { flex: 1; font-size: 14px; line-height: 1.3; word-break: break-word; cursor: pointer; }
-  li.done .label { color: var(--ink-2); text-decoration: line-through; text-decoration-color: var(--acc-dim); }
+  .label { flex: 1; min-width: 0; display: flex; flex-direction: column; cursor: pointer; }
+  .label-text { font-size: 14px; line-height: 1.3; word-break: break-word; }
+  li.done .label-text { color: var(--ink-2); text-decoration: line-through; text-decoration-color: var(--acc-dim); }
+  .label-comment {
+    font-size: 12px;
+    font-style: italic;
+    line-height: 1.3;
+    margin-top: 2px;
+    color: var(--ink-2);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
 
   /* Tag: dog-eared badge, bottom-right corner clipped — the counter tab that
      hangs off the augmentation tiles. */
@@ -622,6 +638,11 @@
       <input id="sheet-text" type="text" placeholder="What needs doing?" autocomplete="off" enterkeyhint="done">
     </div>
 
+    <div class="field">
+      <label class="field-label" for="sheet-comment">Comment (optional)</label>
+      <textarea id="sheet-comment" rows="2" placeholder="Add a note..."></textarea>
+    </div>
+
     <div class="field" id="sheet-cat-field">
       <span class="field-label">Category</span>
       <div class="chips" id="sheet-cats"></div>
@@ -701,6 +722,7 @@
   const sheet = document.getElementById("sheet");
   const sheetBackdrop = document.getElementById("sheet-backdrop");
   const sheetText = document.getElementById("sheet-text");
+  const sheetComment = document.getElementById("sheet-comment");
   const sheetCatField = document.getElementById("sheet-cat-field");
   const sheetCats = document.getElementById("sheet-cats");
   const sheetTags = document.getElementById("sheet-tags");
@@ -1386,10 +1408,21 @@
 
           const label = document.createElement("div");
           label.className = "label";
-          label.textContent = t.text;
           label.onclick = (function (c, idx) {
             return function () { openEdit(c, idx); };
           })(cat, i);
+
+          const labelText = document.createElement("div");
+          labelText.className = "label-text";
+          labelText.textContent = t.text;
+          label.appendChild(labelText);
+
+          if (t.comment) {
+            const labelComment = document.createElement("div");
+            labelComment.className = "label-comment";
+            labelComment.textContent = t.comment;
+            label.appendChild(labelComment);
+          }
 
           li.append(handle, check, label);
 
@@ -1525,6 +1558,7 @@
     sheetDelete.style.display = ctx.mode === "edit" ? "" : "none";
     sheetCatField.style.display = ctx.catLocked ? "none" : "";
     sheetText.value = ctx.text || "";
+    sheetComment.value = ctx.comment || "";
     renderSheetChips();
     updateSaveEnabled();
     sheetBackdrop.classList.add("open");
@@ -1551,6 +1585,7 @@
       cat: cat,
       tag: task.tag || null,
       text: task.text,
+      comment: task.comment || "",
       taskCat: cat,
       taskIndex: index
     });
@@ -1568,12 +1603,13 @@
   function saveSheet() {
     if (!sheetCtx) return;
     const text = sheetText.value.trim();
+    const comment = sheetComment.value.trim();
     const cat = sheetCtx.cat;
     if (!text || !cat) return;
 
     if (sheetCtx.mode === "create") {
       if (!state.tasks[cat]) state.tasks[cat] = [];
-      state.tasks[cat].push({ text: text, done: false, tag: sheetCtx.tag || null, createdAt: new Date().toISOString(), completedAt: null });
+      state.tasks[cat].push({ text: text, done: false, tag: sheetCtx.tag || null, comment: comment || null, createdAt: new Date().toISOString(), completedAt: null });
       state.active = cat;
       if (collapsed[cat]) { collapsed[cat] = false; saveCollapsed(); }
     } else {
@@ -1584,6 +1620,7 @@
       if (task) {
         task.text = text;
         task.tag = sheetCtx.tag || null;
+        task.comment = comment || null;
         if (cat !== from) {
           src.splice(idx, 1);
           if (!state.tasks[cat]) state.tasks[cat] = [];

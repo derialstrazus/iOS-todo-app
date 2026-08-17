@@ -165,13 +165,11 @@ further down). When in doubt, the code wins:
   matching `category` fields in `todos.v2.archive`, so renaming a category
   carries its archived history with it instead of splitting it across the
   old and new names.
-- Category edit sheet, opened by tapping a category bar on the main page:
-  rename, switch Home/Work type, reorder (Up/Down/Top), archive, delete —
-  all the category-management actions, scoped to one category, without
-  leaving the main view. Tapping the bar used to toggle collapse/expand;
-  that's now the caret's job alone (enlarged to a 28px tap target, since it's
-  the only remaining hit zone for a gesture used every day), and the rest of
-  the bar opens the edit sheet instead.
+- Category edit sheet, opened from the main page: rename, switch Home/Work
+  type, reorder (Up/Down/Top), archive, delete — all the category-management
+  actions, scoped to one category, without leaving the main view. (Superseded
+  below: it's no longer opened by tapping the bar, but from a dedicated menu
+  button.)
 
   Everything here applies immediately (rename on blur/Enter, type/archive/
   delete/move on tap) — there's no Save button, just Done to close. Up/Down/
@@ -238,6 +236,33 @@ further down). When in doubt, the code wins:
   only thing left here is the archived-categories list with a Restore button
   per row. No more inline rename inputs, drag-to-reorder, or an add-new-
   category row; `renderCatList()` shows "No archived categories." when empty.
+- Category bar reworked: tapping the bar toggles collapse/expand again (the
+  category edit sheet's own tap-to-open was found confusing), and a new "⋮"
+  button sits between the category name and the "+" — that's what opens the
+  edit sheet now. The caret is purely decorative (shrunk back down; the whole
+  bar is the tap target). Category edit sheet's Delete/Archive/Done now share
+  one row under a "Finalize" field-label, with Done styled as the primary
+  (golden) action to match the task sheet's Save button; Delete/Archive still
+  hide individually when creating a new category, rather than the whole row
+  (Done has to stay visible there). Switching Home/Work mode no longer
+  force-expands every category in the target mode — each category's collapse
+  state now survives a mode switch, via `collapsed[cat]` no longer being
+  reset in `setViewMode()`.
+- Comments on tasks (backlog #2): an optional multi-line note per task,
+  entered in its own "Comment (optional)" field right under Task in the
+  create/edit sheet (`sheet-comment`, a `<textarea>` — unlike every other
+  sheet field so far, which are single-line inputs or chip pickers). Stored
+  as `task.comment`, `null` when empty, same pattern as `task.tag`; needs no
+  backup-envelope change since `normalizeState()` validates shape only, not
+  individual task fields. On the task row it renders as a second line under
+  the task text — `.label` became a flex column (`.label-text` +
+  `.label-comment`) rather than the task text sitting directly in `.label` —
+  styled italic and dimmed, truncated to one line with an ellipsis
+  (`white-space: nowrap` + `text-overflow: ellipsis`) so a long comment
+  doesn't blow out row height; opening the row's edit sheet shows the full
+  text. `.label` needs `min-width: 0` for that ellipsis to actually take
+  effect, since a flex item won't shrink past its content's intrinsic width
+  otherwise.
 
 ## Future screens (long-term plan)
 
@@ -338,8 +363,7 @@ model, and API-vs-email for the side project.
 1. **Recurring tasks** — on app launch, check the recurring-tasks list and add
    any that are due; track each recurring task's last-added date in
    localStorage to determine when it's due again.
-2. **Comments on tasks** — shown as italics on the main page.
-3. **Bug fixes:**
+2. **Bug fixes:**
    1. iPhone: extra gap at the bottom of the screen, below the last row.
       Repro: happens after double-tapping the page.
    2. iPhone: keyboard sometimes doesn't dismiss after a task is saved.
@@ -352,9 +376,9 @@ model, and API-vs-email for the side project.
       Found while building category archiving.
    4. iPhone: when switching modes (Work/Home), the top part of the task
       list is covered by the screen's mode-selection buttons.
-4. **Exercise tracker** — now planned as a full Exercise screen; see Future
+3. **Exercise tracker** — now planned as a full Exercise screen; see Future
    screens. Gets its own store rather than deriving from the todo archive.
-5. **Archive viewer** — a way to browse/search archived (completed) tasks
+4. **Archive viewer** — a way to browse/search archived (completed) tasks
    in-app, **grouped by category and sorted by date**. The data is already
    there: every entry `archiveDone()`/`archiveCategory()` writes carries
    `category`, `createdAt`, `completedAt` and `archivedAt`, so no model

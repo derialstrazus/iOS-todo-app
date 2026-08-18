@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v23`, bumped 2026-08-17.** Shown in the app's About sheet
+**Current: `v24`, bumped 2026-08-17.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 

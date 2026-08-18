@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v25`, bumped 2026-08-17.** Shown in the app's About sheet
+**Current: `v26`, bumped 2026-08-18.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 
@@ -337,6 +337,28 @@ further down). When in doubt, the code wins:
   create flow, the whole Finalize field (label included) hides via
   `#cat-edit-finalize-field`, rather than hiding Delete/Archive individually
   and leaving an empty labeled row behind.
+- First-launch seed data: `defaultState()` no longer returns a single empty
+  "Home" category — it returns a small worked example (Home, Project A,
+  Project B; six tasks exercising the PRIO/WAIT/QUICK tags and a comment).
+  The literal is verbatim the `state` section of a JSON backup export, so
+  refreshing the seed means exporting a new backup and pasting its `state`
+  object in, not hand-authoring an object. `createdAt` stamps are the real
+  ones from that export and stay as literals rather than being generated at
+  launch — nothing in the UI surfaces them, and generating them would break
+  the straight-paste property.
+
+  Only `load()`'s final fallback reaches it, so an existing install and the
+  `todos.v1` migration path are both untouched. As before, the default state
+  isn't written to localStorage until something calls `save()`, so a launch
+  with no edits re-derives the seed each time — indistinguishable from
+  having persisted it.
+- Category bar's "+" (`.sec-add`) is filled rather than outlined: it was a
+  hairline `--acc-dim` ring over a 10%-opacity `--acc-wash`, and now carries
+  the accent gradient + `--acc-glow` drop-shadow that the sheet's Save button
+  and the active mode button already use, so the bar's primary action reads
+  as one. The border is gone — the fill defines the edge. Its `:active` has
+  to re-state the drop-shadow alongside `brightness()`, since `filter` is a
+  single property and a bare brightness would drop the glow mid-press.
 
 ## Future screens (long-term plan)
 

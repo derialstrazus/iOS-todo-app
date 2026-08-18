@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v26`, bumped 2026-08-18.** Shown in the app's About sheet
+**Current: `v27`, bumped 2026-08-18.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 
@@ -353,12 +353,13 @@ further down). When in doubt, the code wins:
   with no edits re-derives the seed each time — indistinguishable from
   having persisted it.
 - Category bar's "+" (`.sec-add`) is filled rather than outlined: it was a
-  hairline `--acc-dim` ring over a 10%-opacity `--acc-wash`, and now carries
-  the accent gradient + `--acc-glow` drop-shadow that the sheet's Save button
-  and the active mode button already use, so the bar's primary action reads
-  as one. The border is gone — the fill defines the edge. Its `:active` has
-  to re-state the drop-shadow alongside `brightness()`, since `filter` is a
-  single property and a bare brightness would drop the glow mid-press.
+  hairline `--acc-dim` ring over a 10%-opacity `--acc-wash`, and now takes
+  the flat accent gradient with no border, since the fill defines the edge.
+  It deliberately does **not** take the `--acc-glow` drop-shadow that the
+  sheet's Save button and the active mode button carry — that halo marks a
+  screen's dominant action, and this button sits inline on a category bar
+  beside the collapse caret, which is the emphasis level it should match.
+  (It shipped with the glow briefly in v26 and read as too loud there.)
 
 ## Future screens (long-term plan)
 

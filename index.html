@@ -128,9 +128,9 @@
        a double-tap, and height: 100% bakes in whatever that stale value was,
        leaving a gap below the last row. Fixed positioning re-reads the real
        viewport bounds instead of trusting a percentage that can go stale. Doesn't
-       change where .fab/.menu/.sheet/etc. anchor — a plain position: fixed
-       ancestor (no transform) isn't a containing block for its own fixed children,
-       so they still resolve against the viewport exactly as before. */
+       change where .menu/.sheet/etc. anchor — a plain position: fixed ancestor (no
+       transform) isn't a containing block for its own fixed children, so they still
+       resolve against the viewport exactly as before. */
     position: fixed;
     inset: 0;
     background:
@@ -184,30 +184,6 @@
     background: linear-gradient(180deg, var(--acc-hi), var(--acc));
     filter: drop-shadow(0 0 7px var(--acc-glow));
   }
-
-  /* Floating add button — same notch rule, scaled up (25% of the edge) */
-  .fab {
-    position: fixed;
-    right: calc(20px + env(safe-area-inset-right));
-    bottom: calc(24px + env(safe-area-inset-bottom));
-    width: 54px; height: 54px;
-    background: linear-gradient(180deg, var(--acc-hi), var(--acc));
-    border: none;
-    color: var(--on-acc);
-    display: flex; align-items: center; justify-content: center;
-    clip-path: polygon(
-      0 0,
-      calc(100% - 13px) 0,
-      100% 13px,
-      100% 100%,
-      13px 100%,
-      0 calc(100% - 13px)
-    );
-    filter: drop-shadow(0 3px 14px var(--acc-glow));
-    z-index: 40;
-  }
-  .fab svg { width: 22px; height: 22px; display: block; }
-  .fab:active { transform: scale(0.94); }
 
   /* Bottom-sheet menu (create / edit) */
   .sheet-backdrop {
@@ -296,13 +272,11 @@
     background: var(--acc-wash);
     color: var(--acc);
   }
-  .chip.chip-add { color: var(--acc); border-style: dashed; font-weight: 600; }
 
-  /* Elevated tier: the category edit sheet stacks above the create/edit task sheet
-     when opened from its "+ New" chip (harmless when opened standalone from the main
-     page, since nothing else is open underneath there). The Organize and About
-     sheets, reachable only from the hamburger menu, never overlap the task sheet
-     either, but share this tier since none of the three are ever open at once. */
+  /* Elevated tier: the category edit, Organize and About sheets are all reachable
+     only from the main screen (category "⋮" / "+ New Category") or the hamburger
+     menu, never stacked above the task sheet, but share this tier since no two of
+     the three are ever open at once. */
   #cat-backdrop, #cat-edit-backdrop, #about-backdrop { z-index: 80; }
   #cat-sheet, #cat-edit-sheet, #about-sheet { z-index: 81; }
 
@@ -438,7 +412,7 @@
   /* Scroll region holding all category sections */
   .scroll {
     flex: 1; overflow-y: auto;
-    padding: 4px 18px calc(96px + env(safe-area-inset-bottom));
+    padding: 4px 18px calc(20px + env(safe-area-inset-bottom));
     -webkit-overflow-scrolling: touch;
     position: relative;
     z-index: 1;
@@ -515,6 +489,25 @@
   .sec-add:active { background: var(--acc); color: var(--on-acc); }
   .sec-body { margin-top: 5px; }
   .section.collapsed .sec-body { display: none; }
+
+  /* Muted, low-emphasis by design — this isn't the primary action on the screen
+     (adding a task to an existing category is), just an escape hatch to start a
+     new one. Dashed border echoes the old chip-add affordance, minus its gold. */
+  .add-cat-btn {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 12px;
+    background: none;
+    border: 1px dashed var(--row-line);
+    color: var(--ink-2);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .add-cat-btn:active { opacity: 0.7; }
 
   /* Task row: square-cornered slab with a 45° hatch, tightened to a ~37px
      pitch. No selection state — this is a touch app, nothing is "focused". */
@@ -651,10 +644,6 @@
 
   <div class="scroll" id="scroll"></div>
 
-  <button class="fab" id="fab" aria-label="Add task">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-  </button>
-
   <div class="sheet-backdrop" id="sheet-backdrop"></div>
   <div class="sheet" id="sheet" role="dialog" aria-modal="true">
     <div class="sheet-grip"></div>
@@ -667,11 +656,6 @@
     <div class="field">
       <label class="field-label" for="sheet-comment">Comment (optional)</label>
       <textarea id="sheet-comment" rows="2" placeholder="Add a note..." enterkeyhint="done"></textarea>
-    </div>
-
-    <div class="field" id="sheet-cat-field">
-      <span class="field-label">Category</span>
-      <div class="chips" id="sheet-cats"></div>
     </div>
 
     <div class="field">
@@ -724,12 +708,12 @@
       </div>
     </div>
 
-    <div class="field">
+    <!-- No Done: like the task sheet, the backdrop tap is the only dismissal. -->
+    <div class="field" id="cat-edit-finalize-field">
       <span class="field-label">Finalize</span>
       <div class="sheet-actions" id="cat-edit-manage-actions">
         <button class="sheet-btn danger" id="cat-edit-delete">Delete</button>
         <button class="sheet-btn secondary" id="cat-edit-archive">Archive</button>
-        <button class="sheet-btn primary" id="cat-edit-done">Done</button>
       </div>
     </div>
   </div>
@@ -763,7 +747,7 @@
   // prior commits had already touched index.html (`git log --oneline -- index.html`)
   // as of the commit that introduced this counter, so the number reflects the app's
   // real edit history instead of resetting it to zero.
-  const APP_VERSION = 24;
+  const APP_VERSION = 25;
   const APP_UPDATED = "2026-08-17";
 
   const KEY = "todos.v2";
@@ -772,14 +756,11 @@
   const toast = document.getElementById("toast");
   const fileInput = document.getElementById("file-input");
 
-  // FAB + bottom sheet
-  const fab = document.getElementById("fab");
+  // Bottom sheet for task create/edit
   const sheet = document.getElementById("sheet");
   const sheetBackdrop = document.getElementById("sheet-backdrop");
   const sheetText = document.getElementById("sheet-text");
   const sheetComment = document.getElementById("sheet-comment");
-  const sheetCatField = document.getElementById("sheet-cat-field");
-  const sheetCats = document.getElementById("sheet-cats");
   const sheetTags = document.getElementById("sheet-tags");
   const sheetSave = document.getElementById("sheet-save");
   const sheetDelete = document.getElementById("sheet-delete");
@@ -790,8 +771,8 @@
   const catList = document.getElementById("cat-list");
   const catDoneBtn = document.getElementById("cat-done-btn");
 
-  // Per-category edit sheet, opened either by tapping a category bar on the main page
-  // (editing) or the task sheet's "+ New" chip (creating; see openCategoryCreateSheet)
+  // Per-category edit sheet, opened either by a category bar's "⋮" button (editing) or
+  // the main screen's "+ New Category" button (creating; see openCategoryCreateSheet)
   const catEditSheet = document.getElementById("cat-edit-sheet");
   const catEditBackdrop = document.getElementById("cat-edit-backdrop");
   const catEditName = document.getElementById("cat-edit-name");
@@ -800,9 +781,9 @@
   const catEditMoveUp = document.getElementById("cat-edit-move-up");
   const catEditMoveDown = document.getElementById("cat-edit-move-down");
   const catEditMoveTop = document.getElementById("cat-edit-move-top");
+  const catEditFinalizeField = document.getElementById("cat-edit-finalize-field");
   const catEditArchiveBtn = document.getElementById("cat-edit-archive");
   const catEditDeleteBtn = document.getElementById("cat-edit-delete");
-  const catEditDoneBtn = document.getElementById("cat-edit-done");
 
   // About sheet — static version/timestamp display, no editable state
   const aboutSheet = document.getElementById("about-sheet");
@@ -946,15 +927,13 @@
   // ---- Screen layer ----
   // The app is a set of screens sharing the top bar and the scroll area; todos
   // is the only one so far (archive / exercise / finance are planned — see
-  // CLAUDE.md "Future screens"). Each entry owns the scroll area's renderer,
-  // its palette (a data-mode value, or null for the :root gold), and whether
-  // the task FAB is shown. `viewMode` (home/work) stays a sub-state of the
-  // todos screen — it is not a screen itself.
+  // CLAUDE.md "Future screens"). Each entry owns the scroll area's renderer and
+  // its palette (a data-mode value, or null for the :root gold). `viewMode`
+  // (home/work) stays a sub-state of the todos screen — it is not a screen itself.
   const SCREENS = {
     todos: {
       render: renderTodoList,
-      palette: function () { return viewMode === "work" ? "work" : null; },
-      fab: true
+      palette: function () { return viewMode === "work" ? "work" : null; }
     }
   };
 
@@ -1168,8 +1147,8 @@
 
   // ---- Organize-categories sheet ----
   // Restore-only: creating and editing active categories now live in the category edit
-  // sheet (main page bar tap, or the task sheet's "+ New" chip), so this sheet's one job
-  // is surfacing archived categories to bring back.
+  // sheet (the "⋮" menu button on a category bar, or the main screen's "+ New Category"
+  // button), so this sheet's one job is surfacing archived categories to bring back.
   function openCatSheet() {
     renderCatList();
     catBackdrop.classList.add("open");
@@ -1179,9 +1158,7 @@
   function closeCatSheet() {
     catSheet.classList.remove("open");
     catBackdrop.classList.remove("open");
-    // reflect any changes on the main list and, if the create/edit sheet is open, its chips
-    render();
-    if (sheetCtx) renderSheetChips();
+    render(); // reflect any restored categories on the main list
   }
 
   // ---- About sheet ----
@@ -1250,19 +1227,21 @@
   }
 
   // ---- Category edit sheet ----
-  // Opened either by tapping a category bar on the main page (editing a real category) or
-  // the task sheet's "+ New" chip (creating one — see openCategoryCreateSheet). Everything
-  // here applies immediately (rename/create on blur/Enter, tag/move/archive on tap) — no
-  // Save button, matching the old Organize sheet row's behavior. `catEditCat` tracks the
-  // name currently committed: null while a new category is still just being typed, so
-  // commitCategoryEditName() knows whether the field means "create" or "rename".
+  // Opened either by a category bar's "⋮" button on the main page (editing a real
+  // category) or the main screen's "+ New Category" button (creating one — see
+  // openCategoryCreateSheet). Everything here applies immediately (rename/create on
+  // blur/Enter, tag/move/archive on tap) — no Save button, matching the old Organize
+  // sheet row's behavior. `catEditCat` tracks the name currently committed: null while
+  // a new category is still just being typed, so commitCategoryEditName() knows
+  // whether the field means "create" or "rename".
   let catEditCat = null;
   // True only for the "+ New" flow: Order/Delete/Archive don't apply to a category that
   // doesn't exist yet (or, once created, wouldn't have had a *previous* position or archive
   // history) — renderCategoryEditSheet() keeps them hidden for the sheet's whole lifetime.
   let catEditIsNew = false;
   // Pending Home/Work selection for a not-yet-created category — there's no real category
-  // to write categoryTags against until the name is actually committed.
+  // to write categoryTags against until the name is actually committed. Defaults to the
+  // active mode, so the new category lands where you're already looking.
   let catCreateTag = "work";
 
   function openCategoryEditSheet(cat) {
@@ -1276,7 +1255,7 @@
   function openCategoryCreateSheet() {
     catEditIsNew = true;
     catEditCat = null;
-    catCreateTag = "work";
+    catCreateTag = viewMode;
     renderCategoryEditSheet();
     catEditBackdrop.classList.add("open");
     catEditSheet.classList.add("open");
@@ -1290,17 +1269,13 @@
     catEditCat = null;
     catEditIsNew = false;
     render();
-    // if opened from the task sheet's "+ New" chip, refresh its category chips so a
-    // newly created category shows up as a pick
-    if (sheetCtx) renderSheetChips();
   }
 
   function renderCategoryEditSheet() {
     const cat = catEditCat;
 
     catEditOrderField.style.display = catEditIsNew ? "none" : "";
-    catEditDeleteBtn.style.display = catEditIsNew ? "none" : "";
-    catEditArchiveBtn.style.display = catEditIsNew ? "none" : "";
+    catEditFinalizeField.style.display = catEditIsNew ? "none" : "";
     catEditName.placeholder = catEditIsNew ? "New category name" : "";
     catEditName.value = cat || "";
 
@@ -1378,19 +1353,30 @@
     else document.documentElement.removeAttribute("data-mode");
     const tc = document.getElementById("theme-color");
     if (tc) tc.setAttribute("content", BAR_COLORS[pal] || BAR_COLORS.default);
-    fab.style.display = scr.fab ? "" : "none";
     scr.render();
   }
 
   // ---- Todos screen: one collapsible section per category ----
+  // Muted entry point for creating a category, sitting at the bottom of whatever the
+  // scroll area shows — the category list, or one of the empty-state messages below.
+  // Always present so there's still a way to add a category from a fully empty state.
+  function renderAddCategoryButton() {
+    const btn = document.createElement("button");
+    btn.className = "add-cat-btn";
+    btn.textContent = "＋ New Category";
+    btn.onclick = function () { openCategoryCreateSheet(); };
+    scroll.appendChild(btn);
+  }
+
   function renderTodoList() {
     scroll.innerHTML = "";
 
     if (state.categories.length === 0) {
       const p = document.createElement("div");
       p.className = "empty-all";
-      p.innerHTML = "No categories yet.<br>Add one above.";
+      p.innerHTML = "No categories yet.<br>Add one below.";
       scroll.appendChild(p);
+      renderAddCategoryButton();
       return;
     }
 
@@ -1403,6 +1389,7 @@
       p.innerHTML = "Nothing in " + (viewMode === "home" ? "Home" : "Work") +
         ".<br>Switch a category's type from its edit sheet to bring one over.";
       scroll.appendChild(p);
+      renderAddCategoryButton();
       return;
     }
 
@@ -1521,6 +1508,8 @@
       section.appendChild(body);
       scroll.appendChild(section);
     });
+
+    renderAddCategoryButton();
   }
 
   // ---- Touch + mouse drag reordering, scoped to a single category ----
@@ -1588,36 +1577,23 @@
   }
 
   // ---- Bottom-sheet create / edit ----
-  // Renders the category and tag chip pickers based on the current sheetCtx selection.
-  function renderSheetChips() {
-    sheetCats.innerHTML = "";
-    state.categories.filter(function (cat) { return !isArchived(cat); }).forEach(function (cat) {
-      const chip = document.createElement("button");
-      chip.className = "chip" + (sheetCtx.cat === cat ? " selected" : "");
-      chip.textContent = cat;
-      chip.onclick = function () { sheetCtx.cat = cat; renderSheetChips(); updateSaveEnabled(); };
-      sheetCats.appendChild(chip);
-    });
-    // "+ New" chip opens the category edit sheet in create mode
-    const addChip = document.createElement("button");
-    addChip.className = "chip chip-add";
-    addChip.textContent = "\uFF0B New";
-    addChip.onclick = function () { openCategoryCreateSheet(); };
-    sheetCats.appendChild(addChip);
-
+  // Renders the tag chip picker based on the current sheetCtx selection. Category isn't
+  // pickable here — a task's category is fixed by which category's "+" opened the sheet
+  // (create) or where it already lives (edit).
+  function renderSheetTagChips() {
     sheetTags.innerHTML = "";
     // "None" option first, then the three tags
     const none = document.createElement("button");
     none.className = "chip" + (!sheetCtx.tag ? " selected" : "");
     none.textContent = "None";
-    none.onclick = function () { sheetCtx.tag = null; renderSheetChips(); };
+    none.onclick = function () { sheetCtx.tag = null; renderSheetTagChips(); };
     sheetTags.appendChild(none);
     TAGS.forEach(function (t) {
       const chip = document.createElement("button");
       chip.className = "chip" + (sheetCtx.tag === t.id ? " selected" : "");
       chip.textContent = t.label;
       chip.setAttribute("aria-label", t.label);
-      chip.onclick = function () { sheetCtx.tag = t.id; renderSheetChips(); };
+      chip.onclick = function () { sheetCtx.tag = t.id; renderSheetTagChips(); };
       sheetTags.appendChild(chip);
     });
   }
@@ -1632,10 +1608,9 @@
     sheetCtx = ctx;
     sheetSave.textContent = ctx.mode === "edit" ? "Save" : "Add task";
     sheetDelete.style.display = ctx.mode === "edit" ? "" : "none";
-    sheetCatField.style.display = ctx.catLocked ? "none" : "";
     sheetText.value = ctx.text || "";
     sheetComment.value = ctx.comment || "";
-    renderSheetChips();
+    renderSheetTagChips();
     updateSaveEnabled();
     sheetBackdrop.classList.add("open");
     sheet.classList.add("open");
@@ -1654,8 +1629,8 @@
     sheetCtx = null;
   }
 
-  function openCreate(presetCat) {
-    openSheet({ mode: "create", cat: presetCat || null, tag: null, text: "", catLocked: !!presetCat });
+  function openCreate(cat) {
+    openSheet({ mode: "create", cat: cat, tag: null, text: "", comment: "" });
   }
 
   function openEdit(cat, index) {
@@ -1914,7 +1889,6 @@
     showToast("Trimmed archive to the most recent " + archive.length + " tasks");
   }
 
-  fab.onclick = function () { openCreate(); };
   sheetSave.onclick = saveSheet;
   sheetDelete.onclick = deleteFromSheet;
   sheetBackdrop.onclick = closeSheet;
@@ -1995,7 +1969,6 @@
   catEditDeleteBtn.onclick = function () {
     if (confirmAndDeleteCategory(catEditCat)) closeCategoryEditSheet();
   };
-  catEditDoneBtn.onclick = closeCategoryEditSheet;
   catEditBackdrop.onclick = closeCategoryEditSheet;
 
   // Catches the case where a restored backup already carries an over-threshold archive.

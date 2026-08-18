@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v24`, bumped 2026-08-17.** Shown in the app's About sheet
+**Current: `v25`, bumped 2026-08-17.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 
@@ -301,9 +301,9 @@ further down). When in doubt, the code wins:
   the zoom gesture itself is suppressed, leaving a gap below the last row
   where `body`'s box falls short of the real screen bottom. `position: fixed`
   re-reads the actual viewport bounds instead of trusting a stale
-  percentage. Doesn't change where `.fab`/`.menu`/`.sheet`/etc. anchor — a
-  plain `position: fixed` ancestor (no `transform`) isn't a containing block
-  for its own fixed descendants, so they still resolve against the viewport
+  percentage. Doesn't change where `.menu`/`.sheet`/etc. anchor — a plain
+  `position: fixed` ancestor (no `transform`) isn't a containing block for
+  its own fixed descendants, so they still resolve against the viewport
   directly, same as before.
 - About sheet: a new "About" item at the bottom of the hamburger menu (past
   a separator, after "Archive done") opens a sheet showing the app's
@@ -313,6 +313,30 @@ further down). When in doubt, the code wins:
   Organize and category-edit sheets, since all three are reachable only
   from the hamburger menu and never open at once. See the Version section
   above for what the stamp means and how it's kept current.
+- FAB removed, replaced by a muted "＋ New Category" button (`.add-cat-btn`,
+  dashed border, no accent color) at the bottom of the main scroll list —
+  always rendered last, in all three of `renderTodoList()`'s branches
+  (populated, "Nothing in Home/Work," and "No categories yet"), so there's
+  still a way to create a category from a fully empty state. Opens the
+  category edit sheet in create mode with Type defaulting to the **active
+  mode** (`catCreateTag = viewMode`) rather than always Work, so the new
+  category lands where you're already looking.
+
+  Task creation now only happens from a category's own "+" button, so the
+  task sheet's Category field (chip picker, plus its "+ New" chip that used
+  to open the category-create flow) is gone entirely — for both create and
+  edit. A task's category is fixed by whichever category's "+" opened the
+  sheet, or wherever it already lives when editing; the sheet can no longer
+  reassign a task to a different category. `renderSheetChips()` (renamed
+  `renderSheetTagChips()`) now only builds the Tag picker.
+
+  Category edit sheet's Done button is gone too, matching the task sheet's
+  own "no Cancel, backdrop-only dismissal" pattern — nothing in that sheet
+  needs an explicit Save/Done since edits already apply live. Delete and
+  Archive now split the Finalize row evenly between the two of them. On the
+  create flow, the whole Finalize field (label included) hides via
+  `#cat-edit-finalize-field`, rather than hiding Delete/Archive individually
+  and leaving an empty labeled row behind.
 
 ## Future screens (long-term plan)
 

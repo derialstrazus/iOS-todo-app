@@ -230,7 +230,7 @@
     text-transform: uppercase;
     letter-spacing: 0.19em;
   }
-  .sheet input[type="text"], .sheet input[type="datetime-local"], .sheet textarea {
+  .sheet input[type="text"], .sheet input[type="datetime-local"], .sheet input[type="date"], .sheet textarea {
     width: 100%;
     background: linear-gradient(180deg, var(--pan-a), var(--pan-b));
     border: 1px solid var(--row-line);
@@ -239,15 +239,16 @@
     font-size: 16px;
     outline: none;
   }
-  .sheet input[type="text"]:focus, .sheet input[type="datetime-local"]:focus, .sheet textarea:focus { border-color: var(--acc); }
+  .sheet input[type="text"]:focus, .sheet input[type="datetime-local"]:focus, .sheet input[type="date"]:focus, .sheet textarea:focus { border-color: var(--acc); }
   /* Sits under the Now/Later chips, and only while Later is picked. color-scheme
      is what gets iOS to render its date wheel dark instead of on white. */
-  .sheet input[type="datetime-local"] {
-    margin-top: 9px;
+  .sheet input[type="datetime-local"], .sheet input[type="date"] {
     color-scheme: dark;
     -webkit-appearance: none;
     appearance: none;
   }
+  /* Only the datetime-local sits under a chip row and needs the gap. */
+  .sheet input[type="datetime-local"] { margin-top: 9px; }
   .sheet textarea {
     font-family: inherit;
     resize: vertical;
@@ -288,7 +289,23 @@
   #cat-backdrop, #cat-edit-backdrop, #about-backdrop { z-index: 80; }
   #cat-sheet, #cat-edit-sheet, #about-sheet { z-index: 81; }
 
-  .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
+  /* Sticky because a create sheet can now outgrow an iPhone screen: Task, Comment,
+     Tag, When, Repeat and Until together overflow the sheet's 88%% cap, and Save
+     would otherwise sit below the fold until you scrolled. Carries the sheet's own
+     background so the rows it covers don't show through, and a negative bottom
+     margin so it still settles flush against the sheet's safe-area padding once
+     you reach the end. */
+  .sheet-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    padding-top: 10px; /* + the 12px margin above = the 22px gap this row always had */
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    margin-bottom: calc(-20px - env(safe-area-inset-bottom));
+  }
 
   /* Organize-categories sheet rows */
   #cat-list { display: flex; flex-direction: column; gap: 3px; }
@@ -709,6 +726,19 @@
       <input id="sheet-when" type="datetime-local">
     </div>
 
+    <!-- Repeat and Until ride with the picker: both are meaningless until there's a
+         first occurrence to anchor them to. Weekly/Monthly take their weekday and
+         day-of-month from that first occurrence, so neither needs a sub-picker. -->
+    <div class="field" id="sheet-repeat-field">
+      <span class="field-label">Repeat</span>
+      <div class="chips" id="sheet-repeat-chips"></div>
+    </div>
+
+    <div class="field" id="sheet-until-field">
+      <label class="field-label" for="sheet-until">Until (optional)</label>
+      <input id="sheet-until" type="date">
+    </div>
+
     <!-- No Cancel: the backdrop tap dismisses. Delete only appears when editing,
          so Save spans the whole row when creating. -->
     <div class="sheet-actions">
@@ -793,7 +823,7 @@
   // prior commits had already touched index.html (`git log --oneline -- index.html`)
   // as of the commit that introduced this counter, so the number reflects the app's
   // real edit history instead of resetting it to zero.
-  const APP_VERSION = 28;
+  const APP_VERSION = 29;
   const APP_UPDATED = "2026-08-21";
 
   const KEY = "todos.v2";
@@ -811,6 +841,10 @@
   const sheetWhenField = document.getElementById("sheet-when-field");
   const sheetWhenChips = document.getElementById("sheet-when-chips");
   const sheetWhenInput = document.getElementById("sheet-when");
+  const sheetRepeatField = document.getElementById("sheet-repeat-field");
+  const sheetRepeatChips = document.getElementById("sheet-repeat-chips");
+  const sheetUntilField = document.getElementById("sheet-until-field");
+  const sheetUntilInput = document.getElementById("sheet-until");
   const sheetSave = document.getElementById("sheet-save");
   const sheetDelete = document.getElementById("sheet-delete");
 
@@ -867,9 +901,12 @@
   }
 
   // Transient state for whatever the sheet is currently editing/creating
-  let sheetCtx = null; // { mode:'create'|'edit'|'pending', cat, tag, later, when, taskCat, taskIndex, pendingIndex }
+  let sheetCtx = null; // { mode:'create'|'edit'|'pending', cat, tag, later, when, repeatKind, until, taskCat, taskIndex, pendingIndex }
   // `later` is the When picker's own state, kept separate from `when` so clearing the
   // date field doesn't silently snap the sheet back to "Now" under the user's finger.
+  // `repeatKind` is a REPEATS id (or null), not a pattern object: the pattern is built
+  // at save time from the id plus the chosen first occurrence, so its weekday /
+  // day-of-month anchors can't go stale while the date is still being edited.
 
   // State shape: { categories: ["Home", ...], active: "Home",
   //   tasks: { "Home": [ {text, done, tag, createdAt, completedAt} ] },
@@ -1016,11 +1053,21 @@
   // backup domain and cascades with category renames for free.
   //
   // Entry shape: { text, tag, comment, cat, dueAt, repeat, createdAt } — the same
-  // fields a task carries, plus dueAt and repeat. `repeat` is always null today and
-  // is the hook for recurring tasks (top of CLAUDE.md's backlog): when it's set, a
-  // promoted entry re-arms itself via nextDueAfter() instead of being consumed. It's
-  // written explicitly rather than left undefined so it shows up in an export and
-  // recurrence needs no migration.
+  // fields a task carries, plus dueAt and repeat. `repeat` is null for a one-shot
+  // ("future") task, which is then consumed by its promotion; a recurring task
+  // carries a pattern there and re-arms its own dueAt via nextDueAfter() each time
+  // it fires, so a single entry stands in for the whole series.
+  //
+  // Pattern shape: { kind: "days", n } | { kind: "weekly", weekday } |
+  // { kind: "monthly", day }, each with `until` — a local "YYYY-MM-DD" date, or
+  // null for no end. "Every day" and "every two days" are one kind with n = 1 or 2
+  // rather than two kinds; the sheet only offers those two, but nothing in the
+  // model objects to n = 3.
+  //
+  // `weekday` and `day` are anchors derived from the first occurrence when the
+  // sheet saves, and stored rather than re-read from dueAt on each step. Monthly is
+  // why: a task on the 31st has to fire Feb 28 and then March 31, so the step has
+  // to know the intended day-of-month, not the clamped one it last landed on.
 
   // Collapse-map key for the Scheduled section, sharing the per-category collapse
   // map. A category actually named __scheduled__ would collapse in step with this
@@ -1043,10 +1090,15 @@
   // "Today, 08:00" / "Tomorrow, 08:00" / "Tue, Aug 25, 08:00". The near days get
   // named because that's what most scheduled tasks are, and a weekday reads faster
   // than a date when you're glancing at the list on a train.
+  function timeOf(iso) {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
   function formatWhen(iso) {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const time = timeOf(iso);
     const midnightToday = new Date(); midnightToday.setHours(0, 0, 0, 0);
     const midnightDue = new Date(d); midnightDue.setHours(0, 0, 0, 0);
     const days = Math.round((midnightDue - midnightToday) / 86400000);
@@ -1055,15 +1107,83 @@
     return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) + ", " + time;
   }
 
+  const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  function ordinal(n) {
+    const tens = n % 100;
+    if (tens >= 11 && tens <= 13) return n + "th";
+    return n + (["th", "st", "nd", "rd"][n % 10] || "th");
+  }
+
+  function daysInMonth(year, month) { return new Date(year, month + 1, 0).getDate(); }
+
+  // "Every day" / "Every 2 days" / "Every Monday" / "Monthly on the 15th".
+  function repeatLabel(r) {
+    if (!r) return null;
+    if (r.kind === "days") return (r.n || 1) === 1 ? "Every day" : "Every " + r.n + " days";
+    if (r.kind === "weekly") return "Every " + (WEEKDAYS[r.weekday] || "week");
+    if (r.kind === "monthly") return "Monthly on the " + ordinal(r.day || 1);
+    return null;
+  }
+
+  // The pattern's end, as the last instant of that local day — `until` is a plain
+  // calendar date, so a task due at 08:00 on its end date still fires.
+  function untilCutoff(until) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(until || "");
+    if (!parts) return null;
+    return new Date(+parts[1], +parts[2] - 1, +parts[3], 23, 59, 59, 999).getTime();
+  }
+
+  // One step forward. Local-calendar arithmetic throughout (setDate, not
+  // millisecond addition), so an 08:00 task stays at 08:00 across a DST boundary
+  // instead of drifting an hour.
+  function stepOccurrence(from, r) {
+    const d = new Date(from);
+    if (r.kind === "days") { d.setDate(d.getDate() + Math.max(1, r.n || 1)); return d; }
+    if (r.kind === "weekly") { d.setDate(d.getDate() + 7); return d; }
+    if (r.kind === "monthly") {
+      // Rebuild from the anchor day rather than stepping the current date, and clamp
+      // to the target month's length: the 31st becomes Feb 28 for February only, and
+      // is back to the 31st in March.
+      const day = r.day || d.getDate();
+      const next = new Date(d.getFullYear(), d.getMonth() + 1, 1, d.getHours(), d.getMinutes(), 0, 0);
+      next.setDate(Math.min(day, daysInMonth(next.getFullYear(), next.getMonth())));
+      return next;
+    }
+    return null;
+  }
+
+  // The second line of a Scheduled row. A repeating entry names its pattern instead
+  // of its next date — for a daily task "Tomorrow" is noise, and the pattern is the
+  // thing you actually want to check at a glance. Either way the row names its own
+  // category, since the section spans them.
+  function pendingWhenLine(p) {
+    const lbl = repeatLabel(p.repeat);
+    return (lbl ? lbl + ", " + timeOf(p.dueAt) : formatWhen(p.dueAt)) + " · " + p.cat;
+  }
+
   // Given an entry that has just been promoted, the ISO stamp of its next
-  // occurrence, or null when it's finished. Without a repeat pattern a scheduled
-  // task fires exactly once, so today this is always null.
+  // occurrence, or null when it's finished. A one-shot entry has no pattern, so
+  // promoting it consumes it.
   function nextDueAfter(entry) {
-    if (!entry.repeat) return null; // one-shot: promoting it consumes it
-    return null; // TODO (recurring tasks): step dueAt forward by entry.repeat's pattern,
-                 // past every occurrence that elapsed while the app was closed —
-                 // one task added on return, not one per missed day — and return
-                 // null once the pattern's end date is behind us.
+    const r = entry.repeat;
+    if (!r) return null;
+    const from = new Date(entry.dueAt);
+    if (isNaN(from.getTime())) return null;
+
+    // Skip past every occurrence that elapsed while the app was closed: a daily
+    // task left for a week comes back as one task, not seven. The counter only
+    // guards against a malformed pattern that fails to advance — a well-formed one
+    // always moves forward, so it can't spin.
+    const now = Date.now();
+    let next = stepOccurrence(from, r);
+    let guard = 0;
+    while (next && next.getTime() <= now && guard++ < 10000) next = stepOccurrence(next, r);
+    if (!next || next.getTime() <= now) return null;
+
+    const cutoff = untilCutoff(r.until);
+    if (cutoff !== null && next.getTime() > cutoff) return null; // pattern is spent
+    return next.toISOString();
   }
 
   function addPendingTask(p) {
@@ -1603,10 +1723,15 @@
       const li = document.createElement("li");
       li.className = "sched";
 
-      // Clock where a task row carries its checkbox: there's nothing to complete yet.
+      // Where a task row carries its checkbox: nothing to complete yet. A clock for a
+      // one-shot, a cycle arrow for a repeat — the two behave differently once they
+      // fire, so they shouldn't look identical while they wait.
       const icon = document.createElement("div");
       icon.className = "sched-icon";
-      icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+      icon.innerHTML = p.repeat
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 3v6h-6"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+      icon.setAttribute("aria-label", p.repeat ? "Repeats" : "Scheduled");
 
       const label = document.createElement("div");
       label.className = "label";
@@ -1618,10 +1743,9 @@
       labelText.className = "label-text";
       labelText.textContent = p.text;
 
-      // The section spans categories, so each row has to name its own.
       const labelWhen = document.createElement("div");
       labelWhen.className = "label-when";
-      labelWhen.textContent = formatWhen(p.dueAt) + " · " + p.cat;
+      labelWhen.textContent = pendingWhenLine(p);
 
       label.append(labelText, labelWhen);
       li.append(icon, label);
@@ -1898,6 +2022,88 @@
     return d.toISOString();
   }
 
+  // The sheet's repeat options. `build` turns an option into a stored pattern,
+  // taking weekly's weekday and monthly's day-of-month from the first occurrence —
+  // that's why the sheet needs no sub-pickers. `label` names the option in terms of
+  // that same date, so "Weekly" reads as "Weekly (Mon)" once a date is chosen.
+  const REPEATS = [
+    {
+      id: "daily", label: function () { return "Every day"; },
+      build: function () { return { kind: "days", n: 1 }; },
+      matches: function (r) { return r.kind === "days" && (r.n || 1) === 1; }
+    },
+    {
+      id: "every2", label: function () { return "Every 2 days"; },
+      build: function () { return { kind: "days", n: 2 }; },
+      matches: function (r) { return r.kind === "days" && r.n === 2; }
+    },
+    {
+      id: "weekly",
+      label: function (d) { return "Weekly (" + WEEKDAYS[d.getDay()].slice(0, 3) + ")"; },
+      build: function (d) { return { kind: "weekly", weekday: d.getDay() }; },
+      matches: function (r) { return r.kind === "weekly"; }
+    },
+    {
+      id: "monthly",
+      label: function (d) { return "Monthly (" + ordinal(d.getDate()) + ")"; },
+      build: function (d) { return { kind: "monthly", day: d.getDate() }; },
+      matches: function (r) { return r.kind === "monthly"; }
+    }
+  ];
+
+  function repeatById(id) {
+    for (let i = 0; i < REPEATS.length; i++) if (REPEATS[i].id === id) return REPEATS[i];
+    return null;
+  }
+  function repeatKindId(r) {
+    if (!r) return null;
+    for (let i = 0; i < REPEATS.length; i++) if (REPEATS[i].matches(r)) return REPEATS[i].id;
+    return null;
+  }
+  // Pattern from the sheet's state. Rebuilt on every save, so editing the first
+  // occurrence to a Thursday moves a weekly task to Thursdays with it.
+  function buildRepeat(kindId, whenIso, until) {
+    const def = repeatById(kindId);
+    if (!def) return null;
+    const r = def.build(new Date(whenIso));
+    r.until = until || null;
+    return r;
+  }
+
+  function renderSheetRepeatChips() {
+    sheetRepeatChips.innerHTML = "";
+    const anchor = new Date(sheetCtx.when || Date.now());
+
+    const none = document.createElement("button");
+    none.className = "chip" + (!sheetCtx.repeatKind ? " selected" : "");
+    none.textContent = "Once";
+    none.onclick = function () { setSheetRepeat(null); };
+    sheetRepeatChips.appendChild(none);
+
+    REPEATS.forEach(function (def) {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (sheetCtx.repeatKind === def.id ? " selected" : "");
+      chip.textContent = def.label(anchor);
+      chip.onclick = function () { setSheetRepeat(def.id); };
+      sheetRepeatChips.appendChild(chip);
+    });
+
+    // Nothing to bound when it only happens once.
+    sheetUntilField.style.display = sheetCtx.repeatKind ? "" : "none";
+    sheetUntilInput.value = sheetCtx.until || "";
+    // Guidance only. An `until` before the first occurrence isn't a dead end — the
+    // first one still fires and the pattern is simply spent, so there's nothing to
+    // validate against.
+    if (sheetCtx.when) sheetUntilInput.min = toLocalInput(sheetCtx.when).slice(0, 10);
+  }
+
+  function setSheetRepeat(kindId) {
+    sheetCtx.repeatKind = kindId;
+    if (!kindId) sheetCtx.until = null;
+    renderSheetRepeatChips();
+    updateSaveEnabled(); // the Save button names the repeat, so it restates too
+  }
+
   function renderSheetWhenChips() {
     sheetWhenChips.innerHTML = "";
     [["Now", false], ["Later", true]].forEach(function (opt) {
@@ -1912,11 +2118,16 @@
       sheetWhenInput.min = toLocalInput(new Date().toISOString());
       sheetWhenInput.value = sheetCtx.when ? toLocalInput(sheetCtx.when) : "";
     }
+    // A repeat needs a first occurrence to anchor to, so it rides with the picker.
+    sheetRepeatField.style.display = sheetCtx.later ? "" : "none";
+    if (sheetCtx.later) renderSheetRepeatChips();
+    else sheetUntilField.style.display = "none";
   }
 
   function setSheetLater(later) {
     sheetCtx.later = later;
     if (later && !sheetCtx.when) sheetCtx.when = defaultWhen();
+    if (!later) { sheetCtx.repeatKind = null; sheetCtx.until = null; }
     renderSheetWhenChips();
     updateSaveEnabled();
   }
@@ -1934,7 +2145,10 @@
   // isn't "adding" it, and clearing a scheduled task's date puts it in the list now.
   function sheetSaveLabel() {
     if (!sheetCtx) return "Add task";
-    if (sheetCtx.mode === "create") return sheetCtx.later ? "Schedule" : "Add task";
+    if (sheetCtx.mode === "create") {
+      if (!sheetCtx.later) return "Add task";
+      return sheetCtx.repeatKind ? "Schedule repeat" : "Schedule";
+    }
     if (sheetCtx.mode === "pending") return sheetCtx.later ? "Save" : "Add now";
     return "Save";
   }
@@ -1946,7 +2160,7 @@
     sheetText.value = ctx.text || "";
     sheetComment.value = ctx.comment || "";
     renderSheetTagChips();
-    renderSheetWhenChips();
+    renderSheetWhenChips(); // also draws Repeat/Until, which ride with the picker
     updateSaveEnabled();
     sheetBackdrop.classList.add("open");
     sheet.classList.add("open");
@@ -1966,7 +2180,7 @@
   }
 
   function openCreate(cat) {
-    openSheet({ mode: "create", cat: cat, tag: null, text: "", comment: "", later: false, when: null });
+    openSheet({ mode: "create", cat: cat, tag: null, text: "", comment: "", later: false, when: null, repeatKind: null, until: null });
   }
 
   // Editing a scheduled task: same sheet, with When pre-set to its due date.
@@ -1981,6 +2195,8 @@
       comment: p.comment || "",
       later: true,
       when: p.dueAt,
+      repeatKind: repeatKindId(p.repeat),
+      until: p.repeat ? (p.repeat.until || null) : null,
       pendingIndex: index
     });
   }
@@ -1997,7 +2213,9 @@
       taskCat: cat,
       taskIndex: index,
       later: false,
-      when: null
+      when: null,
+      repeatKind: null,
+      until: null
     });
   }
 
@@ -2028,6 +2246,7 @@
     // across midnight otherwise turns into a dead end.
     const dueAt = sheetCtx.later && sheetCtx.when && Date.parse(sheetCtx.when) > Date.now()
       ? sheetCtx.when : null;
+    const repeat = dueAt ? buildRepeat(sheetCtx.repeatKind, dueAt, sheetCtx.until) : null;
 
     if (sheetCtx.mode === "pending") {
       const p = state.pending[sheetCtx.pendingIndex];
@@ -2037,6 +2256,7 @@
         p.comment = comment || null;
         if (dueAt) {
           p.dueAt = dueAt;
+          p.repeat = repeat;
         } else {
           // Rescheduled to now: it stops waiting and joins the list.
           state.pending.splice(sheetCtx.pendingIndex, 1);
@@ -2049,7 +2269,7 @@
       if (dueAt) {
         state.pending.push({
           text: text, tag: sheetCtx.tag || null, comment: comment || null,
-          cat: cat, dueAt: dueAt, repeat: null, createdAt: new Date().toISOString()
+          cat: cat, dueAt: dueAt, repeat: repeat, createdAt: new Date().toISOString()
         });
         if (collapsed[SCHEDULED_KEY]) { collapsed[SCHEDULED_KEY] = false; saveCollapsed(); }
       } else {
@@ -2305,6 +2525,16 @@
   sheetWhenInput.addEventListener("change", function () {
     if (!sheetCtx) return;
     sheetCtx.when = fromLocalInput(sheetWhenInput.value);
+    // Weekly/Monthly name their anchor after this date, so the chips restate
+    // themselves when it moves — "Weekly (Mon)" becomes "Weekly (Thu)".
+    if (sheetCtx.later) renderSheetRepeatChips();
+    updateSaveEnabled();
+  });
+  // A plain date, stored as typed ("YYYY-MM-DD") rather than as an instant: it's a
+  // calendar boundary, not a moment, and it reads back that way in an export.
+  sheetUntilInput.addEventListener("change", function () {
+    if (!sheetCtx) return;
+    sheetCtx.until = sheetUntilInput.value || null;
     updateSaveEnabled();
   });
 

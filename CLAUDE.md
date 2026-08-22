@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v28`, bumped 2026-08-21.** Shown in the app's About sheet
+**Current: `v29`, bumped 2026-08-21.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 
@@ -369,15 +369,12 @@ further down). When in doubt, the code wins:
   `load()` and one in `normalizeState()` cover old installs and old backups.
 
   Entry shape is `{ text, tag, comment, cat, dueAt, repeat, createdAt }` —
-  the fields a task carries, plus `dueAt` and `repeat`. **`repeat` is always
-  `null` today and is the hook for recurring tasks (backlog #1 as it now
-  stands)**: written explicitly so it shows up in an export and recurrence
-  needs no migration. `promotePending()` moves every entry whose moment has
-  arrived into its category, then asks `nextDueAfter(entry)` whether to
-  re-arm it — that function returns `null` for a one-shot entry, and is the
-  single place recurrence has to fill in. `createdAt` on the promoted *task*
-  stamps when it joined the list; the entry's own `createdAt` records when it
-  was scheduled.
+  the fields a task carries, plus `dueAt` and `repeat`. `repeat` is `null`
+  for a one-shot, which its promotion then consumes (recurring tasks, below,
+  fill it in). `promotePending()` moves every entry whose moment has arrived
+  into its category, then asks `nextDueAfter(entry)` whether to re-arm it.
+  `createdAt` on the promoted *task* stamps when it joined the list; the
+  entry's own `createdAt` records when it was scheduled.
 
   Promotion runs at launch **and on `visibilitychange`** — an iOS PWA is
   resumed far more often than launched, and can sit suspended for days, so
@@ -415,6 +412,61 @@ further down). When in doubt, the code wins:
   its scheduled tasks first"), the same shape of guard as the existing
   unfinished-tasks one — an entry pointing at an archived category can never
   land.
+- Recurring tasks: a scheduled entry whose `repeat` holds a pattern re-arms
+  its own `dueAt` each time it fires, so **one entry stands in for the whole
+  series** — there is no list of future instances anywhere.
+
+  Pattern shape: `{ kind: "days", n }` | `{ kind: "weekly", weekday }` |
+  `{ kind: "monthly", day }`, each carrying `until` — a plain local
+  `"YYYY-MM-DD"` date, or `null` for no end (optional by decision; most
+  recurring chores genuinely don't end). "Every day" and "every two days" are
+  **one kind with `n = 1` or `2`**, not two kinds; the sheet offers only those
+  two, but nothing in the model objects to `n = 3`.
+
+  `weekday` and `day` are **anchors derived from the first occurrence** when
+  the sheet saves — that's why Repeat is a single chip row with no
+  sub-pickers, and why the chips read "Weekly (Mon)" / "Monthly (24th)",
+  restating themselves when the When date moves. The trade is that "every
+  Monday" requires the first occurrence to be a Monday. They're *stored*
+  rather than re-read from `dueAt` on each step, and monthly is why: a task
+  on the 31st must fire Feb 28 and then **March 31**, so the step has to know
+  the intended day-of-month, not the clamped one it last landed on.
+  `stepOccurrence()` rebuilds monthly dates from that anchor and clamps to
+  the target month's length.
+
+  All stepping is local-calendar arithmetic (`setDate`, never millisecond
+  addition), so an 08:00 task stays at 08:00 across a DST boundary instead of
+  drifting an hour. `nextDueAfter()` steps until it passes *now* — a daily
+  task left for a week comes back as **one** task, not seven — then returns
+  `null` if the result is past `until`, which ends the series and drops the
+  entry. The end date is inclusive: a task due 08:00 on its `until` day still
+  fires. An `until` earlier than the first occurrence needs no validation —
+  the first one fires and the pattern is simply spent.
+
+  UI: a **Repeat** chip row and an **Until (optional)** date field, both
+  riding with the When picker since a pattern needs a first occurrence to
+  anchor to; switching When back to Now clears them, which ends the series
+  and puts the task in the list once. The `REPEATS` registry holds one entry
+  per option (`label` / `build` / `matches`), so a fifth pattern is one entry
+  plus a `stepOccurrence` branch. `sheetCtx.repeatKind` holds an option **id**,
+  not a pattern object — the pattern is built at save time from the id plus
+  the chosen date, so its anchors can't go stale while the date is still being
+  edited. On a Scheduled row, a repeating entry takes a **cycle arrow** in
+  place of the clock and names its pattern instead of its next date ("Every
+  Monday, 09:30" — for a daily task "Tomorrow" is noise).
+
+  Nothing about backup changed: `repeat` lives inside `state.pending`, and
+  `normalizeState()` validates shape, not task fields. Entries written before
+  this (a missing or null `repeat`) read as one-shots.
+- `.sheet-actions` is **`position: sticky; bottom: 0`** with the sheet's own
+  background. The task sheet at its longest — Task, Comment, Tag, When,
+  Repeat, Until — is ~783px of content against the sheet's 88%-of-viewport
+  cap (~714px on a 812pt iPhone), so Save would otherwise sit below the fold
+  until you scrolled. Its `padding-bottom` and a matching negative
+  `margin-bottom` cancel, so the row still settles flush against the
+  safe-area padding at the end of the scroll, and `margin-top` dropped 22px →
+  12px to offset the new 10px `padding-top` — the visible gap is unchanged on
+  every sheet that doesn't scroll.
 
 ## Future screens (long-term plan)
 
@@ -512,26 +564,9 @@ model, and API-vs-email for the side project.
 
 ## Backlog (build individually, in priority order)
 
-1. **Recurring tasks** — create a task that automatically reappears at a
-   recurring rate. It lives in the same `state.pending` list that Future
-   tasks (**done** — see Current state) already use, and while it sits there
-   it stores its recurring pattern in the entry's `repeat` field, which is
-   `null` for every entry today. The work is concentrated in
-   `nextDueAfter(entry)`: it returns the next occurrence's ISO stamp after a
-   promotion, or `null` when the pattern is spent, and `promotePending()`
-   already re-arms the entry with whatever it returns. A pattern that elapsed
-   several times while the app was closed should advance past all of them and
-   add **one** task, not backfill each. Also owed: a Repeat field in the task
-   sheet under When, and a way to tell a repeating row from a one-shot one in
-   the Scheduled section. The pattern carries an **end date** and must
-   handle:
-   - Occurs every day
-   - Occurs every two days
-   - Occurs every weekday (e.g. every Monday)
-   - Occurs on a specific date each month
-2. **Exercise tracker** — now planned as a full Exercise screen; see Future
+1. **Exercise tracker** — now planned as a full Exercise screen; see Future
    screens. Gets its own store rather than deriving from the todo archive.
-3. **Archive viewer** — a way to browse/search archived (completed) tasks
+2. **Archive viewer** — a way to browse/search archived (completed) tasks
    in-app, **grouped by category and sorted by date**. The data is already
    there: every entry `archiveDone()`/`archiveCategory()` writes carries
    `category`, `createdAt`, `completedAt` and `archivedAt`, so no model

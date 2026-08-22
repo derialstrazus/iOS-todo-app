@@ -289,23 +289,14 @@
   #cat-backdrop, #cat-edit-backdrop, #about-backdrop { z-index: 80; }
   #cat-sheet, #cat-edit-sheet, #about-sheet { z-index: 81; }
 
-  /* Sticky because a create sheet can now outgrow an iPhone screen: Task, Comment,
-     Tag, When, Repeat and Until together overflow the sheet's 88%% cap, and Save
-     would otherwise sit below the fold until you scrolled. Carries the sheet's own
-     background so the rows it covers don't show through, and a negative bottom
-     margin so it still settles flush against the sheet's safe-area padding once
-     you reach the end. */
-  .sheet-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 12px;
-    position: sticky;
-    bottom: 0;
-    background: var(--surface);
-    padding-top: 10px; /* + the 12px margin above = the 22px gap this row always had */
-    padding-bottom: calc(20px + env(safe-area-inset-bottom));
-    margin-bottom: calc(-20px - env(safe-area-inset-bottom));
-  }
+  /* Deliberately NOT sticky. A create sheet with every field showing (Task,
+     Comment, Tag, When, Repeat, Until) outgrows the sheet's 88% cap on an iPhone,
+     and pinning this row so Save stayed reachable meant it painted over whatever
+     scrolled beneath it — the last row of Repeat chips sat half-hidden under the
+     button from the moment the sheet opened. A sheet that scrolls is ordinary; a
+     control sliced in half looks broken. The row stays in flow at the end of the
+     form, where every other sheet has always had it. */
+  .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
 
   /* Organize-categories sheet rows */
   #cat-list { display: flex; flex-direction: column; gap: 3px; }
@@ -823,7 +814,7 @@
   // prior commits had already touched index.html (`git log --oneline -- index.html`)
   // as of the commit that introduced this counter, so the number reflects the app's
   // real edit history instead of resetting it to zero.
-  const APP_VERSION = 29;
+  const APP_VERSION = 30;
   const APP_UPDATED = "2026-08-21";
 
   const KEY = "todos.v2";

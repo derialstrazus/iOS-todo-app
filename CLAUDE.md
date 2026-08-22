@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v29`, bumped 2026-08-21.** Shown in the app's About sheet
+**Current: `v30`, bumped 2026-08-21.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 
@@ -458,15 +458,17 @@ further down). When in doubt, the code wins:
   Nothing about backup changed: `repeat` lives inside `state.pending`, and
   `normalizeState()` validates shape, not task fields. Entries written before
   this (a missing or null `repeat`) read as one-shots.
-- `.sheet-actions` is **`position: sticky; bottom: 0`** with the sheet's own
-  background. The task sheet at its longest — Task, Comment, Tag, When,
-  Repeat, Until — is ~783px of content against the sheet's 88%-of-viewport
-  cap (~714px on a 812pt iPhone), so Save would otherwise sit below the fold
-  until you scrolled. Its `padding-bottom` and a matching negative
-  `margin-bottom` cancel, so the row still settles flush against the
-  safe-area padding at the end of the scroll, and `margin-top` dropped 22px →
-  12px to offset the new 10px `padding-top` — the visible gap is unchanged on
-  every sheet that doesn't scroll.
+- `.sheet-actions` stays **in flow — deliberately not sticky**. The task sheet
+  at its longest (Task, Comment, Tag, When, Repeat, Until) is ~773px of
+  content against the sheet's 88%-of-viewport cap (~714px on an 812pt
+  iPhone), so Save sits ~59px below the fold there. v29 pinned the row to fix
+  that and it was a mistake: a sticky bar paints over whatever scrolls under
+  it, so the second row of Repeat chips was sliced in half by the button from
+  the moment the sheet opened (reverted in v30). A sheet that scrolls is
+  ordinary; a control cut in half looks broken. Note the shape of the
+  problem before reaching for a pinned footer again — only the *longest* form
+  overflows at all, and the common one (Repeat visible, Until hidden, because
+  "Once" is selected) comes to 676px and doesn't scroll.
 
 ## Future screens (long-term plan)
 

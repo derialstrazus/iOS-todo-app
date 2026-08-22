@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v32`, bumped 2026-08-22.** Shown in the app's About sheet
+**Current: `v35`, bumped 2026-08-22.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 
@@ -314,7 +314,7 @@ further down). When in doubt, the code wins:
   from the hamburger menu and never open at once. See the Version section
   above for what the stamp means and how it's kept current.
 - FAB removed, replaced by a muted "＋ New Category" button (`.add-cat-btn`,
-  dashed border, no accent color) at the bottom of the main scroll list —
+  see its own bullet below for the styling) at the bottom of the main scroll list —
   always rendered last, in all three of `renderTodoList()`'s branches
   (populated, "Nothing in Home/Work," and "No categories yet"), so there's
   still a way to create a category from a fully empty state. Opens the
@@ -487,6 +487,55 @@ further down). When in doubt, the code wins:
   then still sees the committed `catEditCat`, so it's a no-op rather than a
   rename against `null` (and on the Archive/Delete paths, where the field can
   be focused when the sheet closes, it's likewise inert).
+
+- Scheduled section demoted out of the category vocabulary. It reused
+  `.sec-head` verbatim, so it read as just another category when it's the
+  opposite — nothing in it is actionable today. All three cues that say
+  "category" come off the header: the lighter-than-ground fill, the accent
+  left tick and caret, and the full-size title. What's left is a hairline
+  rule with a small caret and the word riding on its right end, in `--ink-2`
+  — a section break rather than a thing you own. `order` on the flex children
+  puts the rule first and pulls caret and title right, where `.sec-title`'s
+  own right-alignment already sits. The box stays **34px tall** even though
+  its ink is lighter than a category bar's: with no fill, height is
+  invisible, so the tap target loses nothing while the visual weight does.
+
+  The **rows** had to go with it — a muted header over full-weight task slabs
+  still left the block looking like today's work. `li.sched` drops the 45°
+  hatch and the panel gradient for a flat `rgba(255,255,255,0.02)` wash, and
+  its text and icon drop from `--acc-dim` to `--ink-2`, since `--acc-dim` is
+  still the accent and the accent is what marks the screen's live surfaces.
+  Neutral white rather than an accent-derived token, so the wash stays
+  colourless against both palettes. The old blanket `opacity: 0.88` is gone,
+  replaced by those per-element colours.
+
+  Four rejected alternatives are in `design/sched-variants.html` (git-ignored,
+  local only): a dashed outline, a recessed bar sitting darker than the
+  ground, a drained-and-faded copy of the category bar, and the header change
+  alone without the row change. The last is the instructive one — it's what
+  made clear the slabs were carrying as much of the "this is today's work"
+  signal as the bar was.
+
+- "＋ New Category" restyled: it now pops as a **surface**, not a louder line
+  — `--acc-wash` fill, the 45° notch, `--acc-dim` text, no border. It went
+  1px dashed `--row-line` (v33, too faint to find against the hatched rows) →
+  2px dotted `--ink-2` (v34, which read as a placeholder drop-zone, not a
+  control) → this. The lesson worth keeping: an outline can only gain
+  presence by getting brighter, and a loud outline on a *secondary* control
+  reads like an error state. A quiet fill raises presence without raising
+  volume.
+
+  The notch is the shape reserved for things you press, which this is; no
+  border comes with it, per the notch's own mechanical rule (`clip-path` cuts
+  a border away on the diagonals, so the fill has to define the edge). Note
+  the text sits at `--acc-dim` over a 10% wash of the same hue — deliberately
+  low contrast to keep it under the category "+", and the thing to revisit
+  first if it proves hard to read on the phone.
+
+  Rejected alternatives are in `design/addcat-variants.html` (git-ignored,
+  local only): a hairline over a white wash, a dashed hairline in `--acc-dim`,
+  a borderless accent-wash plate, a notched `--tab-a`/`--tab-b` button, and a
+  plain solid `--ink-2` hairline.
 
 - `.sheet-actions` stays **in flow — deliberately not sticky**. The task sheet
   at its longest (Task, Comment, Tag, When, Repeat, Until) is ~773px of

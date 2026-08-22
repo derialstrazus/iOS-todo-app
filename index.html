@@ -515,20 +515,34 @@
 
   /* Muted, low-emphasis by design — this isn't the primary action on the screen
      (adding a task to an existing category is), just an escape hatch to start a
-     new one. Dashed border echoes the old chip-add affordance, minus its gold. */
+     new one. It pops as a SURFACE rather than a louder line: an outline can only
+     gain presence by getting brighter, and a loud outline on a secondary control
+     reads like an error state (v34's 2px dotted border did exactly that). So it
+     takes the accent wash as a fill, and the 45° notch — the shape the design
+     reserves for things you press, which this is. No border, per the notch's own
+     rule: clip-path cuts a border away on the diagonals, so the fill defines the
+     edge. --acc-dim text keeps it well under the category "+" in emphasis. */
   .add-cat-btn {
     display: block;
     width: 100%;
     margin-top: 10px;
     padding: 12px;
-    background: none;
-    border: 1px dashed var(--row-line);
-    color: var(--ink-2);
+    background: var(--acc-wash);
+    border: none;
+    color: var(--acc-dim);
     font-size: 12.5px;
     font-weight: 600;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     text-align: center;
+    clip-path: polygon(
+      0 0,
+      calc(100% - 12px) 0,
+      100% 12px,
+      100% 100%,
+      12px 100%,
+      0 calc(100% - 12px)
+    );
   }
   .add-cat-btn:active { opacity: 0.7; }
 
@@ -609,10 +623,63 @@
   .tag-quick { background: var(--acc); color: var(--on-acc); }
   li.done .tag-icon { opacity: 0.4; }
 
+  /* The Scheduled section deliberately does NOT wear the category bar. Reusing
+     .sec-head made it read as another category, when it's the opposite: nothing in
+     it is actionable today. So all three cues that say "category" come off — the
+     lighter-than-ground fill, the accent left tick and caret, and the full-size
+     title — leaving a hairline rule with a small caret and the word riding on its
+     right end. A section break, not a thing you own.
+
+     The box stays 34px tall even though the ink inside it is thinner than a category
+     bar's: with no fill, height is invisible, so the tap target loses nothing while
+     the weight does. `order` puts the rule first and pulls the caret and title to
+     the right, where .sec-title's own right-alignment already sits. */
+  .section-sched .sec-head {
+    height: 34px;
+    padding: 0 2px;
+    gap: 10px;
+    background: none;
+    border: none;
+    border-radius: 0;
+  }
+  .section-sched .sec-head::before {
+    content: "";
+    order: 1;
+    flex: 1;
+    height: 1px;
+    background: var(--row-line);
+  }
+  .section-sched .sec-caret {
+    order: 2;
+    width: 12px; height: 12px;
+    color: var(--ink-2);
+  }
+  .section-sched .sec-caret svg { width: 8px; height: 8px; }
+  .section-sched .sec-title {
+    order: 3;
+    flex: 0 0 auto;
+    font-size: 10.5px;
+    letter-spacing: 0.24em;
+    color: var(--ink-2);
+  }
+
   /* Scheduled rows: the task slab minus its checkbox and drag handle — nothing to
-     complete yet, and the order is the clock's, not the user's. Dimmed a touch so
-     the section reads as pending rather than as today's work. */
-  li.sched { opacity: 0.88; }
+     complete yet, and the order is the clock's, not the user's. They also drop the
+     45° hatch and the panel gradient the task rows carry, for a flat near-transparent
+     wash — a muted header over full-weight slabs still left the block looking like
+     today's work. Neutral white rather than an accent-derived token, so the wash
+     stays colourless against both palettes' ground. */
+  li.sched {
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  /* Text and icon drop from the accent to plain muted ink for the same reason the
+     header did: --acc-dim is still the accent, and the accent is what marks the
+     screen's live surfaces. */
+  .section-sched .label-text { color: var(--ink-2); }
+  .section-sched .label-when { color: var(--ink-2); opacity: 0.75; }
+  .section-sched .sched-icon { color: var(--ink-2); opacity: 0.7; }
+  .section-sched .tag-icon { opacity: 0.5; }
   .sched-icon {
     width: 17px; height: 17px;
     flex-shrink: 0;
@@ -822,7 +889,7 @@
   // prior commits had already touched index.html (`git log --oneline -- index.html`)
   // as of the commit that introduced this counter, so the number reflects the app's
   // real edit history instead of resetting it to zero.
-  const APP_VERSION = 32;
+  const APP_VERSION = 35;
   const APP_UPDATED = "2026-08-22";
 
   const KEY = "todos.v2";

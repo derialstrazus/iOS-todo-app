@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v27`, bumped 2026-08-18.** Shown in the app's About sheet
+**Current: `v28`, bumped 2026-08-21.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 
@@ -360,6 +360,61 @@ further down). When in doubt, the code wins:
   screen's dominant action, and this button sits inline on a category bar
   beside the collapse caret, which is the emphasis level it should match.
   (It shipped with the glow briefly in v26 and read as too loud there.)
+- Scheduled tasks (backlog #1, "Future tasks"): a task can be created with a
+  date and time instead of joining the list right away. It waits in
+  `state.pending` — inside `state`, not a key of its own: the archive was
+  split off because it accumulates thousands of rows, while this list is
+  small and bounded, so keeping it here means it rides the existing backup
+  domain and cascades with category renames for free. One default line in
+  `load()` and one in `normalizeState()` cover old installs and old backups.
+
+  Entry shape is `{ text, tag, comment, cat, dueAt, repeat, createdAt }` —
+  the fields a task carries, plus `dueAt` and `repeat`. **`repeat` is always
+  `null` today and is the hook for recurring tasks (backlog #1 as it now
+  stands)**: written explicitly so it shows up in an export and recurrence
+  needs no migration. `promotePending()` moves every entry whose moment has
+  arrived into its category, then asks `nextDueAfter(entry)` whether to
+  re-arm it — that function returns `null` for a one-shot entry, and is the
+  single place recurrence has to fill in. `createdAt` on the promoted *task*
+  stamps when it joined the list; the entry's own `createdAt` records when it
+  was scheduled.
+
+  Promotion runs at launch **and on `visibilitychange`** — an iOS PWA is
+  resumed far more often than launched, and can sit suspended for days, so
+  launch alone would miss the ordinary case. It also runs after a restore,
+  since a backup can carry entries that came due while it sat in the file.
+  Entries whose category is missing or archived are **held, not dropped** —
+  the category may come back, and silently discarding a scheduled task is
+  worse than a row that lingers. Promotion never force-expands the target
+  category (that would override a deliberate collapse); the toast names the
+  task instead.
+
+  UI: the task sheet gains a **When** field (last, after Tag) with Now /
+  Later chips; Later reveals an `<input type="datetime-local">` defaulting to
+  tomorrow 08:00, with `min` pinned to now and `color-scheme: dark` so iOS
+  renders its wheel dark. `sheetCtx.later` is tracked separately from
+  `sheetCtx.when` so clearing the date field just disables Save rather than
+  snapping the sheet back to Now mid-edit. The Save button renames itself to
+  say what the tap does — "Schedule", or "Add now" when a scheduled task is
+  switched back to Now. The field is hidden when editing a task that already
+  lives in the list. `sheetCtx.mode` gained a third value, `"pending"`.
+
+  On screen, scheduled tasks are **one collapsible "Scheduled" section below
+  the categories**, spanning every category in the current mode, soonest
+  first — not inline per category: a scheduled task isn't actionable today,
+  and the main screen is for the day's list. Rows carry a clock where a task
+  row has its checkbox, and a second line reading `Tomorrow, 08:00 · Project
+  A` (near days are named; the row has to name its own category since the
+  section spans them). Tapping a row opens the same sheet to edit or delete
+  it. The section is skipped entirely when empty, and is also rendered in the
+  "Nothing in Home/Work" branch so an entry can't become unreachable. Its
+  collapse state shares the per-category `collapsed` map under the
+  `SCHEDULED_KEY` sentinel.
+
+  Archiving a category is **blocked while it has scheduled tasks** ("Delete
+  its scheduled tasks first"), the same shape of guard as the existing
+  unfinished-tasks one — an entry pointing at an archived category can never
+  land.
 
 ## Future screens (long-term plan)
 
@@ -457,9 +512,23 @@ model, and API-vs-email for the side project.
 
 ## Backlog (build individually, in priority order)
 
-1. **Recurring tasks** — on app launch, check the recurring-tasks list and add
-   any that are due; track each recurring task's last-added date in
-   localStorage to determine when it's due again.
+1. **Recurring tasks** — create a task that automatically reappears at a
+   recurring rate. It lives in the same `state.pending` list that Future
+   tasks (**done** — see Current state) already use, and while it sits there
+   it stores its recurring pattern in the entry's `repeat` field, which is
+   `null` for every entry today. The work is concentrated in
+   `nextDueAfter(entry)`: it returns the next occurrence's ISO stamp after a
+   promotion, or `null` when the pattern is spent, and `promotePending()`
+   already re-arms the entry with whatever it returns. A pattern that elapsed
+   several times while the app was closed should advance past all of them and
+   add **one** task, not backfill each. Also owed: a Repeat field in the task
+   sheet under When, and a way to tell a repeating row from a one-shot one in
+   the Scheduled section. The pattern carries an **end date** and must
+   handle:
+   - Occurs every day
+   - Occurs every two days
+   - Occurs every weekday (e.g. every Monday)
+   - Occurs on a specific date each month
 2. **Exercise tracker** — now planned as a full Exercise screen; see Future
    screens. Gets its own store rather than deriving from the todo archive.
 3. **Archive viewer** — a way to browse/search archived (completed) tasks

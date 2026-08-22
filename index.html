@@ -230,7 +230,7 @@
     text-transform: uppercase;
     letter-spacing: 0.19em;
   }
-  .sheet input[type="text"], .sheet textarea {
+  .sheet input[type="text"], .sheet input[type="datetime-local"], .sheet textarea {
     width: 100%;
     background: linear-gradient(180deg, var(--pan-a), var(--pan-b));
     border: 1px solid var(--row-line);
@@ -239,7 +239,15 @@
     font-size: 16px;
     outline: none;
   }
-  .sheet input[type="text"]:focus, .sheet textarea:focus { border-color: var(--acc); }
+  .sheet input[type="text"]:focus, .sheet input[type="datetime-local"]:focus, .sheet textarea:focus { border-color: var(--acc); }
+  /* Sits under the Now/Later chips, and only while Later is picked. color-scheme
+     is what gets iOS to render its date wheel dark instead of on white. */
+  .sheet input[type="datetime-local"] {
+    margin-top: 9px;
+    color-scheme: dark;
+    -webkit-appearance: none;
+    appearance: none;
+  }
   .sheet textarea {
     font-family: inherit;
     resize: vertical;
@@ -593,6 +601,28 @@
   .tag-quick { background: var(--acc); color: var(--on-acc); }
   li.done .tag-icon { opacity: 0.4; }
 
+  /* Scheduled rows: the task slab minus its checkbox and drag handle — nothing to
+     complete yet, and the order is the clock's, not the user's. Dimmed a touch so
+     the section reads as pending rather than as today's work. */
+  li.sched { opacity: 0.88; }
+  .sched-icon {
+    width: 17px; height: 17px;
+    flex-shrink: 0;
+    color: var(--acc-dim);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sched-icon svg { width: 15px; height: 15px; display: block; }
+  .label-when {
+    font-size: 11.5px;
+    line-height: 1.3;
+    margin-top: 2px;
+    letter-spacing: 0.05em;
+    color: var(--acc-dim);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
   .sec-empty {
     color: var(--ink-2);
     font-size: 12px;
@@ -668,6 +698,15 @@
     <div class="field">
       <span class="field-label">Tag (optional)</span>
       <div class="chips" id="sheet-tags"></div>
+    </div>
+
+    <!-- Scheduling. Now is the default, so the everyday create flow costs no extra
+         taps; Later reveals the picker. Hidden when editing a task that already
+         lives in the list — sending one back to the future isn't a thing. -->
+    <div class="field" id="sheet-when-field">
+      <span class="field-label">When</span>
+      <div class="chips" id="sheet-when-chips"></div>
+      <input id="sheet-when" type="datetime-local">
     </div>
 
     <!-- No Cancel: the backdrop tap dismisses. Delete only appears when editing,
@@ -754,8 +793,8 @@
   // prior commits had already touched index.html (`git log --oneline -- index.html`)
   // as of the commit that introduced this counter, so the number reflects the app's
   // real edit history instead of resetting it to zero.
-  const APP_VERSION = 27;
-  const APP_UPDATED = "2026-08-18";
+  const APP_VERSION = 28;
+  const APP_UPDATED = "2026-08-21";
 
   const KEY = "todos.v2";
 
@@ -769,6 +808,9 @@
   const sheetText = document.getElementById("sheet-text");
   const sheetComment = document.getElementById("sheet-comment");
   const sheetTags = document.getElementById("sheet-tags");
+  const sheetWhenField = document.getElementById("sheet-when-field");
+  const sheetWhenChips = document.getElementById("sheet-when-chips");
+  const sheetWhenInput = document.getElementById("sheet-when");
   const sheetSave = document.getElementById("sheet-save");
   const sheetDelete = document.getElementById("sheet-delete");
 
@@ -825,16 +867,21 @@
   }
 
   // Transient state for whatever the sheet is currently editing/creating
-  let sheetCtx = null; // { mode:'create'|'edit', cat, tag, taskCat, taskIndex }
+  let sheetCtx = null; // { mode:'create'|'edit'|'pending', cat, tag, later, when, taskCat, taskIndex, pendingIndex }
+  // `later` is the When picker's own state, kept separate from `when` so clearing the
+  // date field doesn't silently snap the sheet back to "Now" under the user's finger.
 
   // State shape: { categories: ["Home", ...], active: "Home",
   //   tasks: { "Home": [ {text, done, tag, createdAt, completedAt} ] },
-  //   categoryTags: { "Home": "home" | "work" } }
+  //   categoryTags: { "Home": "home" | "work" },
+  //   pending: [ {text, tag, comment, cat, dueAt, repeat, createdAt} ] }
   // createdAt is set once at creation. completedAt is set when done becomes true and
   // cleared back to null if unchecked. Tasks created before this field existed simply
   // lack it (undefined) until next touched.
   // `active` is retained for back-compat; here it's the default category for the Add box.
   // `categoryTags` may be sparse; read it through tagOf(), never directly.
+  // `pending` holds scheduled tasks that haven't joined the list yet — see the
+  // "Scheduled (pending) tasks" section below.
   let state = load();
 
   // Per-category collapsed state, keyed by category name. Kept in localStorage; not part of the JSON backup.
@@ -892,7 +939,8 @@
         ]
       },
       categoryTags: { "Home": "home", "Project A": "work", "Project B": "work" },
-      categoryArchived: {}
+      categoryArchived: {},
+      pending: []
     };
   }
   function load() {
@@ -901,6 +949,7 @@
       if (s && s.categories && s.tasks) {
         if (!s.categoryTags || typeof s.categoryTags !== "object") s.categoryTags = {};
         if (!s.categoryArchived || typeof s.categoryArchived !== "object") s.categoryArchived = {};
+        if (!Array.isArray(s.pending)) s.pending = [];
         return s;
       }
     } catch (e) {}
@@ -908,7 +957,7 @@
     try {
       const old = JSON.parse(localStorage.getItem("todos.v1"));
       if (Array.isArray(old) && old.length) {
-        return { categories: ["Home"], active: "Home", tasks: { "Home": old }, categoryTags: {}, categoryArchived: {} };
+        return { categories: ["Home"], active: "Home", tasks: { "Home": old }, categoryTags: {}, categoryArchived: {}, pending: [] };
       }
     } catch (e) {}
     return defaultState();
@@ -956,6 +1005,113 @@
   // The mode is a filter: only its own, non-archived categories are on screen, in saved order.
   function displayCategories() {
     return state.categories.filter(function (c) { return tagOf(c) === viewMode && !isArchived(c); });
+  }
+
+  // ---- Scheduled (pending) tasks ----
+  // A scheduled task is one that hasn't joined the list yet: it waits in
+  // `state.pending` until its `dueAt` arrives, and promotePending() then moves it
+  // into its category as an ordinary task. It lives inside `state` rather than in
+  // a key of its own — the archive was split off because it accumulates thousands
+  // of rows, while this list is small and bounded — so it rides the existing
+  // backup domain and cascades with category renames for free.
+  //
+  // Entry shape: { text, tag, comment, cat, dueAt, repeat, createdAt } — the same
+  // fields a task carries, plus dueAt and repeat. `repeat` is always null today and
+  // is the hook for recurring tasks (top of CLAUDE.md's backlog): when it's set, a
+  // promoted entry re-arms itself via nextDueAfter() instead of being consumed. It's
+  // written explicitly rather than left undefined so it shows up in an export and
+  // recurrence needs no migration.
+
+  // Collapse-map key for the Scheduled section, sharing the per-category collapse
+  // map. A category actually named __scheduled__ would collapse in step with this
+  // section — harmless, and the alternative (a control character) puts a byte in
+  // the source that tooling treats as binary.
+  const SCHEDULED_KEY = "__scheduled__";
+
+  // Entries for the given mode, soonest first, each with its index in state.pending.
+  // An entry whose category has gone missing reads as "work" through tagOf(), same
+  // fallback that keeps legacy untagged categories reachable.
+  function pendingFor(mode) {
+    const out = [];
+    state.pending.forEach(function (p, i) {
+      if (tagOf(p.cat) === mode) out.push({ entry: p, index: i });
+    });
+    out.sort(function (a, b) { return Date.parse(a.entry.dueAt) - Date.parse(b.entry.dueAt); });
+    return out;
+  }
+
+  // "Today, 08:00" / "Tomorrow, 08:00" / "Tue, Aug 25, 08:00". The near days get
+  // named because that's what most scheduled tasks are, and a weekday reads faster
+  // than a date when you're glancing at the list on a train.
+  function formatWhen(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const midnightToday = new Date(); midnightToday.setHours(0, 0, 0, 0);
+    const midnightDue = new Date(d); midnightDue.setHours(0, 0, 0, 0);
+    const days = Math.round((midnightDue - midnightToday) / 86400000);
+    if (days === 0) return "Today, " + time;
+    if (days === 1) return "Tomorrow, " + time;
+    return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) + ", " + time;
+  }
+
+  // Given an entry that has just been promoted, the ISO stamp of its next
+  // occurrence, or null when it's finished. Without a repeat pattern a scheduled
+  // task fires exactly once, so today this is always null.
+  function nextDueAfter(entry) {
+    if (!entry.repeat) return null; // one-shot: promoting it consumes it
+    return null; // TODO (recurring tasks): step dueAt forward by entry.repeat's pattern,
+                 // past every occurrence that elapsed while the app was closed —
+                 // one task added on return, not one per missed day — and return
+                 // null once the pattern's end date is behind us.
+  }
+
+  function addPendingTask(p) {
+    if (!state.tasks[p.cat]) state.tasks[p.cat] = [];
+    // createdAt stamps when the task joined the list, not when it was scheduled —
+    // the entry's own createdAt already records the latter.
+    state.tasks[p.cat].push({
+      text: p.text, done: false, tag: p.tag || null, comment: p.comment || null,
+      createdAt: new Date().toISOString(), completedAt: null
+    });
+  }
+
+  // Moves every entry whose moment has arrived into its category. Returns the
+  // promoted entries, or null if nothing moved. Called at launch and again
+  // whenever the app returns to the foreground: an iOS PWA can sit suspended for
+  // days, so launch alone would miss the ordinary case of reopening yesterday's
+  // session. Entries whose category is missing or archived are held rather than
+  // dropped — the category may come back, and silently discarding a task the user
+  // scheduled is worse than a row that lingers.
+  function promotePending() {
+    if (!state.pending.length) return null;
+    const now = Date.now();
+    const keep = [];
+    const added = [];
+    state.pending.forEach(function (p) {
+      const due = Date.parse(p.dueAt);
+      if (isNaN(due) || due > now) { keep.push(p); return; }
+      if (state.categories.indexOf(p.cat) === -1 || isArchived(p.cat)) { keep.push(p); return; }
+      addPendingTask(p);
+      added.push(p);
+      const next = nextDueAfter(p);
+      if (next) { p.dueAt = next; keep.push(p); }
+    });
+    if (!added.length) return null;
+    state.pending = keep;
+    save();
+    return added;
+  }
+
+  // Promotion is silent otherwise: a task appearing in a collapsed category would
+  // be invisible, and force-expanding it would override a collapse the user chose.
+  function promoteAndReport() {
+    const added = promotePending();
+    if (!added) return false;
+    showToast(added.length === 1
+      ? '"' + added[0].text + '" added to ' + added[0].cat
+      : added.length + " scheduled tasks added");
+    return true;
   }
 
   // ---- Screen layer ----
@@ -1071,6 +1227,7 @@
     if (state.categoryArchived[oldName] !== undefined) { state.categoryArchived[newName] = state.categoryArchived[oldName]; delete state.categoryArchived[oldName]; }
     if (collapsed[oldName] !== undefined) { collapsed[newName] = collapsed[oldName]; delete collapsed[oldName]; saveCollapsed(); }
     if (state.active === oldName) state.active = newName;
+    state.pending.forEach(function (p) { if (p.cat === oldName) p.cat = newName; });
     // Archived tasks carry the category name they had when archived — without this,
     // a rename splits that category's history across the old and new names.
     let archiveChanged = false;
@@ -1090,6 +1247,7 @@
     delete state.tasks[cat];
     delete state.categoryTags[cat];
     delete state.categoryArchived[cat];
+    state.pending = state.pending.filter(function (p) { return p.cat !== cat; });
     delete collapsed[cat]; saveCollapsed();
     if (state.active === cat) state.active = state.categories[0];
     save();
@@ -1117,6 +1275,9 @@
     if (activeCount <= 1) return "Keep at least one category";
     const tasks = state.tasks[cat] || [];
     if (tasks.some(function (t) { return !t.done; })) return "Finish or delete remaining tasks first";
+    // A scheduled task can't land in an archived category, so it would sit there
+    // stranded. Same shape of guard as the unfinished-tasks one above.
+    if (state.pending.some(function (p) { return p.cat === cat; })) return "Delete its scheduled tasks first";
     const n = sweepDoneTasks(cat);
     state.categoryArchived[cat] = true;
     delete collapsed[cat]; saveCollapsed();
@@ -1402,6 +1563,86 @@
     scroll.appendChild(btn);
   }
 
+  // Scheduled tasks across every category in the current mode, soonest first, as
+  // one collapsible section below the categories. Deliberately not inline in each
+  // category: a scheduled task isn't actionable today, and the day's list is what
+  // the main screen is for. Skipped entirely when empty rather than showing an
+  // empty section. Recurring tasks will surface here too when they land.
+  function renderScheduledSection() {
+    const items = pendingFor(viewMode);
+    if (!items.length) return;
+
+    const isCollapsed = !!collapsed[SCHEDULED_KEY];
+    const section = document.createElement("div");
+    section.className = "section section-sched" + (isCollapsed ? " collapsed" : "");
+
+    const head = document.createElement("div");
+    head.className = "sec-head";
+
+    const caret = document.createElement("span");
+    caret.className = "sec-caret";
+    caret.innerHTML = '<svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M1 3.5h10L6 9.5z"/></svg>';
+
+    const title = document.createElement("span");
+    title.className = "sec-title";
+    title.textContent = "Scheduled";
+
+    head.append(caret, title);
+    head.onclick = function () {
+      collapsed[SCHEDULED_KEY] = !collapsed[SCHEDULED_KEY];
+      saveCollapsed();
+      section.classList.toggle("collapsed");
+    };
+    section.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "sec-body";
+
+    items.forEach(function (it) {
+      const p = it.entry;
+      const li = document.createElement("li");
+      li.className = "sched";
+
+      // Clock where a task row carries its checkbox: there's nothing to complete yet.
+      const icon = document.createElement("div");
+      icon.className = "sched-icon";
+      icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+
+      const label = document.createElement("div");
+      label.className = "label";
+      label.onclick = (function (idx) {
+        return function () { openEditPending(idx); };
+      })(it.index);
+
+      const labelText = document.createElement("div");
+      labelText.className = "label-text";
+      labelText.textContent = p.text;
+
+      // The section spans categories, so each row has to name its own.
+      const labelWhen = document.createElement("div");
+      labelWhen.className = "label-when";
+      labelWhen.textContent = formatWhen(p.dueAt) + " · " + p.cat;
+
+      label.append(labelText, labelWhen);
+      li.append(icon, label);
+
+      const tagDef = tagById(p.tag);
+      if (tagDef) {
+        const badge = document.createElement("span");
+        badge.className = "tag-icon tag-" + tagDef.id;
+        badge.textContent = tagDef.short;
+        badge.setAttribute("aria-label", tagDef.label);
+        badge.title = tagDef.label;
+        li.appendChild(badge);
+      }
+
+      body.appendChild(li);
+    });
+
+    section.appendChild(body);
+    scroll.appendChild(section);
+  }
+
   function renderTodoList() {
     scroll.innerHTML = "";
 
@@ -1423,6 +1664,9 @@
       p.innerHTML = "Nothing in " + (viewMode === "home" ? "Home" : "Work") +
         ".<br>Switch a category's type from its edit sheet to bring one over.";
       scroll.appendChild(p);
+      // Still shown here: every category in this mode can be archived while a
+      // scheduled task for one of them is waiting, and it needs to stay reachable.
+      renderScheduledSection();
       renderAddCategoryButton();
       return;
     }
@@ -1543,6 +1787,7 @@
       scroll.appendChild(section);
     });
 
+    renderScheduledSection();
     renderAddCategoryButton();
   }
 
@@ -1632,19 +1877,76 @@
     });
   }
 
+  // datetime-local speaks local wall-clock time with no zone ("2026-08-25T08:00"),
+  // while everything stored is ISO/UTC — these two convert between them.
+  function toLocalInput(iso) {
+    const d = new Date(iso);
+    const p2 = function (n) { return String(n).padStart(2, "0"); };
+    return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) +
+      "T" + p2(d.getHours()) + ":" + p2(d.getMinutes());
+  }
+  function fromLocalInput(v) {
+    const d = v ? new Date(v) : null; // no zone suffix: parsed as local time
+    return d && !isNaN(d.getTime()) ? d.toISOString() : null;
+  }
+  // Tomorrow morning — the common case for a commute app is "deal with this
+  // tomorrow", and it beats defaulting to a time that's already passed.
+  function defaultWhen() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(8, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  function renderSheetWhenChips() {
+    sheetWhenChips.innerHTML = "";
+    [["Now", false], ["Later", true]].forEach(function (opt) {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (!!sheetCtx.later === opt[1] ? " selected" : "");
+      chip.textContent = opt[0];
+      chip.onclick = function () { setSheetLater(opt[1]); };
+      sheetWhenChips.appendChild(chip);
+    });
+    sheetWhenInput.style.display = sheetCtx.later ? "" : "none";
+    if (sheetCtx.later) {
+      sheetWhenInput.min = toLocalInput(new Date().toISOString());
+      sheetWhenInput.value = sheetCtx.when ? toLocalInput(sheetCtx.when) : "";
+    }
+  }
+
+  function setSheetLater(later) {
+    sheetCtx.later = later;
+    if (later && !sheetCtx.when) sheetCtx.when = defaultWhen();
+    renderSheetWhenChips();
+    updateSaveEnabled();
+  }
+
   function updateSaveEnabled() {
-    // Require both a non-empty task and a chosen category (no default).
-    const ok = sheetText.value.trim().length > 0 && !!sheetCtx && !!sheetCtx.cat;
+    // Require a non-empty task, a category (no default), and — if Later is picked —
+    // an actual date to go with it.
+    const ok = sheetText.value.trim().length > 0 && !!sheetCtx && !!sheetCtx.cat &&
+      (!sheetCtx.later || !!sheetCtx.when);
     sheetSave.disabled = !ok;
+    sheetSave.textContent = sheetSaveLabel();
+  }
+
+  // The button says what the tap will actually do: scheduling something for later
+  // isn't "adding" it, and clearing a scheduled task's date puts it in the list now.
+  function sheetSaveLabel() {
+    if (!sheetCtx) return "Add task";
+    if (sheetCtx.mode === "create") return sheetCtx.later ? "Schedule" : "Add task";
+    if (sheetCtx.mode === "pending") return sheetCtx.later ? "Save" : "Add now";
+    return "Save";
   }
 
   function openSheet(ctx) {
     sheetCtx = ctx;
-    sheetSave.textContent = ctx.mode === "edit" ? "Save" : "Add task";
-    sheetDelete.style.display = ctx.mode === "edit" ? "" : "none";
+    sheetDelete.style.display = ctx.mode === "create" ? "none" : "";
+    sheetWhenField.style.display = ctx.mode === "edit" ? "none" : "";
     sheetText.value = ctx.text || "";
     sheetComment.value = ctx.comment || "";
     renderSheetTagChips();
+    renderSheetWhenChips();
     updateSaveEnabled();
     sheetBackdrop.classList.add("open");
     sheet.classList.add("open");
@@ -1664,7 +1966,23 @@
   }
 
   function openCreate(cat) {
-    openSheet({ mode: "create", cat: cat, tag: null, text: "", comment: "" });
+    openSheet({ mode: "create", cat: cat, tag: null, text: "", comment: "", later: false, when: null });
+  }
+
+  // Editing a scheduled task: same sheet, with When pre-set to its due date.
+  function openEditPending(index) {
+    const p = state.pending[index];
+    if (!p) return;
+    openSheet({
+      mode: "pending",
+      cat: p.cat,
+      tag: p.tag || null,
+      text: p.text,
+      comment: p.comment || "",
+      later: true,
+      when: p.dueAt,
+      pendingIndex: index
+    });
   }
 
   function openEdit(cat, index) {
@@ -1677,12 +1995,21 @@
       text: task.text,
       comment: task.comment || "",
       taskCat: cat,
-      taskIndex: index
+      taskIndex: index,
+      later: false,
+      when: null
     });
   }
 
   function deleteFromSheet() {
-    if (!sheetCtx || sheetCtx.mode !== "edit") return;
+    if (!sheetCtx || sheetCtx.mode === "create") return;
+    if (sheetCtx.mode === "pending") {
+      state.pending.splice(sheetCtx.pendingIndex, 1);
+      save();
+      closeSheet();
+      render();
+      return;
+    }
     const src = state.tasks[sheetCtx.taskCat] || [];
     if (src[sheetCtx.taskIndex]) src.splice(sheetCtx.taskIndex, 1);
     save();
@@ -1696,12 +2023,41 @@
     const comment = sheetComment.value.trim();
     const cat = sheetCtx.cat;
     if (!text || !cat) return;
+    // A time that has already passed is treated as "now" rather than rejected —
+    // the picker's `min` keeps it from happening, but a stale sheet left open
+    // across midnight otherwise turns into a dead end.
+    const dueAt = sheetCtx.later && sheetCtx.when && Date.parse(sheetCtx.when) > Date.now()
+      ? sheetCtx.when : null;
 
-    if (sheetCtx.mode === "create") {
-      if (!state.tasks[cat]) state.tasks[cat] = [];
-      state.tasks[cat].push({ text: text, done: false, tag: sheetCtx.tag || null, comment: comment || null, createdAt: new Date().toISOString(), completedAt: null });
+    if (sheetCtx.mode === "pending") {
+      const p = state.pending[sheetCtx.pendingIndex];
+      if (p) {
+        p.text = text;
+        p.tag = sheetCtx.tag || null;
+        p.comment = comment || null;
+        if (dueAt) {
+          p.dueAt = dueAt;
+        } else {
+          // Rescheduled to now: it stops waiting and joins the list.
+          state.pending.splice(sheetCtx.pendingIndex, 1);
+          addPendingTask(p);
+          state.active = p.cat;
+          if (collapsed[p.cat]) { collapsed[p.cat] = false; saveCollapsed(); }
+        }
+      }
+    } else if (sheetCtx.mode === "create") {
+      if (dueAt) {
+        state.pending.push({
+          text: text, tag: sheetCtx.tag || null, comment: comment || null,
+          cat: cat, dueAt: dueAt, repeat: null, createdAt: new Date().toISOString()
+        });
+        if (collapsed[SCHEDULED_KEY]) { collapsed[SCHEDULED_KEY] = false; saveCollapsed(); }
+      } else {
+        if (!state.tasks[cat]) state.tasks[cat] = [];
+        state.tasks[cat].push({ text: text, done: false, tag: sheetCtx.tag || null, comment: comment || null, createdAt: new Date().toISOString(), completedAt: null });
+        if (collapsed[cat]) { collapsed[cat] = false; saveCollapsed(); }
+      }
       state.active = cat;
-      if (collapsed[cat]) { collapsed[cat] = false; saveCollapsed(); }
     } else {
       // edit: task may move to a different category
       const from = sheetCtx.taskCat, idx = sheetCtx.taskIndex;
@@ -1727,11 +2083,13 @@
   // ---- Show all / Collapse all ----
   function showAll() {
     state.categories.forEach(function (c) { collapsed[c] = false; });
+    collapsed[SCHEDULED_KEY] = false;
     saveCollapsed();
     render();
   }
   function collapseAll() {
     state.categories.forEach(function (c) { collapsed[c] = true; });
+    collapsed[SCHEDULED_KEY] = true;
     saveCollapsed();
     render();
   }
@@ -1812,6 +2170,7 @@
     if (!st.active || st.categories.indexOf(st.active) === -1) st.active = st.categories[0];
     if (!st.categoryTags || typeof st.categoryTags !== "object") st.categoryTags = {};
     if (!st.categoryArchived || typeof st.categoryArchived !== "object") st.categoryArchived = {};
+    if (!Array.isArray(st.pending)) st.pending = [];
     return st;
   }
 
@@ -1852,6 +2211,9 @@
       if (!confirm("Restore this backup? It replaces:\n" + lines.join("\n") +
           "\nAnything not in the file is left untouched.")) return;
       applyBackup(sections);
+      // A restored backup can carry scheduled tasks that came due while it sat in
+      // the file — sweep before rendering so they land in the list, not the future.
+      promotePending();
       render();
       showToast("Backup restored");
     };
@@ -1938,6 +2300,13 @@
       saveSheet();
     }
   });
+  // Clearing the field leaves Later selected with no date, which just disables
+  // Save — better than silently reverting the sheet to "Now" mid-edit.
+  sheetWhenInput.addEventListener("change", function () {
+    if (!sheetCtx) return;
+    sheetCtx.when = fromLocalInput(sheetWhenInput.value);
+    updateSaveEnabled();
+  });
 
   // ---- Hamburger menu ----
   const menuBtn = document.getElementById("menu-btn");
@@ -2005,8 +2374,17 @@
   };
   catEditBackdrop.onclick = closeCategoryEditSheet;
 
+  // An iOS PWA is usually resumed, not launched — it can sit suspended for days —
+  // so due scheduled tasks are swept in on the way back to the foreground as well
+  // as at startup. The startup sweep runs before the first render, so its results
+  // are simply part of the list that appears.
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && promoteAndReport()) render();
+  });
+
   // Catches the case where a restored backup already carries an over-threshold archive.
   checkArchiveThreshold();
+  promoteAndReport();
   buildNav();
   render();
 </script>

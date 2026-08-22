@@ -783,6 +783,14 @@
         <button class="sheet-btn secondary" id="cat-edit-archive">Archive</button>
       </div>
     </div>
+
+    <!-- The name already commits on blur/Enter, but there was no explicit
+         commit-and-close action to aim at; this is the category sheet's
+         equivalent of the task sheet's Save. Stays visible when creating,
+         where the Finalize field above it is hidden. -->
+    <div class="sheet-actions">
+      <button class="sheet-btn primary" id="cat-edit-save">Add category</button>
+    </div>
   </div>
 
   <div class="sheet-backdrop" id="about-backdrop"></div>
@@ -814,8 +822,8 @@
   // prior commits had already touched index.html (`git log --oneline -- index.html`)
   // as of the commit that introduced this counter, so the number reflects the app's
   // real edit history instead of resetting it to zero.
-  const APP_VERSION = 30;
-  const APP_UPDATED = "2026-08-21";
+  const APP_VERSION = 32;
+  const APP_UPDATED = "2026-08-22";
 
   const KEY = "todos.v2";
 
@@ -858,6 +866,7 @@
   const catEditFinalizeField = document.getElementById("cat-edit-finalize-field");
   const catEditArchiveBtn = document.getElementById("cat-edit-archive");
   const catEditDeleteBtn = document.getElementById("cat-edit-delete");
+  const catEditSaveBtn = document.getElementById("cat-edit-save");
 
   // About sheet — static version/timestamp display, no editable state
   const aboutSheet = document.getElementById("about-sheet");
@@ -1570,6 +1579,12 @@
   }
 
   function closeCategoryEditSheet() {
+    // Same reason the task sheet's closeSheet() blurs its fields: a backdrop tap blurs
+    // the name field for free, but saving from the keyboard's Return/checkmark key
+    // closes the sheet programmatically, and iOS keeps its keyboard up if focus never
+    // moved. Blurred first, while catEditCat still names the committed category — the
+    // blur handler's own commit is then a no-op rather than a rename against null.
+    catEditName.blur();
     catEditSheet.classList.remove("open");
     catEditBackdrop.classList.remove("open");
     catEditCat = null;
@@ -1583,6 +1598,7 @@
     catEditOrderField.style.display = catEditIsNew ? "none" : "";
     catEditFinalizeField.style.display = catEditIsNew ? "none" : "";
     catEditName.placeholder = catEditIsNew ? "New category name" : "";
+    catEditSaveBtn.textContent = catEditIsNew ? "Add category" : "Save category";
     catEditName.value = cat || "";
 
     catEditTypeChips.innerHTML = "";
@@ -1615,16 +1631,19 @@
     catEditMoveTop.disabled = idx <= 0;
   }
 
+  // Returns true when the name is committed (created, renamed, or already current),
+  // false when it isn't — the Save button uses that to decide whether to close.
   function commitCategoryEditName() {
     const cat = catEditCat;
     const next = catEditName.value.trim();
 
     if (!cat) {
       // Nothing created yet — this field IS the create flow, not a rename. A blur with
-      // nothing typed is just the user tapping elsewhere, not an error.
-      if (!next) return;
+      // nothing typed is just the user tapping elsewhere, not an error, so it stays
+      // silent here; only the Save button complains about an empty name.
+      if (!next) return false;
       const res = createCategory(next);
-      if (res !== true) { showToast(res); return; }
+      if (res !== true) { showToast(res); return false; }
       if (catCreateTag === "home") { state.categoryTags[next] = "home"; save(); }
       catEditCat = next;
       // Deliberately no renderCategoryEditSheet() here: this runs inside a blur handler
@@ -1632,13 +1651,30 @@
       // chip's DOM out from under the same gesture can drop the click that triggered the
       // blur in the first place. The chip's own onclick reads catEditCat live, so the
       // existing (unrebuilt) elements already handle the just-created category correctly.
-      return;
+      return true;
     }
 
-    if (next === cat) { catEditName.value = cat; return; }
+    if (next === cat) { catEditName.value = cat; return true; }
     const res = renameCategory(cat, next);
-    if (res !== true) { showToast(res); catEditName.value = cat; return; }
+    if (res !== true) { showToast(res); catEditName.value = cat; return false; }
     catEditCat = next;
+    return true;
+  }
+
+  // The sheet's one commit-and-close action, shared by the Save button and the name
+  // field's Enter key. Type/Order/Archive/Delete all apply live, so the only work here
+  // is the name. A tap on Save blurs the name field on mousedown first, so the
+  // create/rename has usually already run by the time this is called — re-running it is
+  // a no-op once the committed name matches the field — and calling it explicitly is
+  // what makes the Enter path (no blur of its own) commit at all.
+  function saveCategorySheet() {
+    if (!commitCategoryEditName()) {
+      // createCategory/renameCategory toast their own failures; the one silent case is
+      // an empty name in the create flow, which only this action needs to complain about.
+      if (!catEditCat) showToast("Enter a name");
+      return;
+    }
+    closeCategoryEditSheet();
   }
 
   // ---- Render: dispatch to the active screen ----
@@ -2573,9 +2609,14 @@
   aboutBackdrop.onclick = closeAboutSheet;
 
   // Category edit sheet controls
-  catEditName.onblur = commitCategoryEditName;
+  // Wrapped rather than assigned directly so commitCategoryEditName()'s boolean
+  // isn't handed to the event system as a handler return value.
+  catEditName.onblur = function () { commitCategoryEditName(); };
+  // Enter — iOS's blue Done key — takes the same path as the Save button, so the sheet
+  // closes on it exactly like the task sheet's Task field does. It used to only blur,
+  // which committed the name but left the sheet sitting open with nothing else to do.
   catEditName.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") { e.preventDefault(); catEditName.blur(); }
+    if (e.key === "Enter") { e.preventDefault(); saveCategorySheet(); }
   });
   // Closes the sheet on move (rather than re-rendering in place, like the other
   // fields) so the reordering is visible on the main screen right away.
@@ -2593,6 +2634,7 @@
   catEditDeleteBtn.onclick = function () {
     if (confirmAndDeleteCategory(catEditCat)) closeCategoryEditSheet();
   };
+  catEditSaveBtn.onclick = saveCategorySheet;
   catEditBackdrop.onclick = closeCategoryEditSheet;
 
   // An iOS PWA is usually resumed, not launched — it can sit suspended for days —

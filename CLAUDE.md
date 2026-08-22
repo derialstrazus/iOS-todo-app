@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v30`, bumped 2026-08-21.** Shown in the app's About sheet
+**Current: `v32`, bumped 2026-08-22.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 
@@ -458,6 +458,36 @@ further down). When in doubt, the code wins:
   Nothing about backup changed: `repeat` lives inside `state.pending`, and
   `normalizeState()` validates shape, not task fields. Entries written before
   this (a missing or null `repeat`) read as one-shots.
+- Category edit sheet gains a **Save button** — `.sheet-btn.primary` (so it's
+  gold in Home mode, steel in Work, matching the task sheet's Save), in its own
+  full-width row below the Finalize field, reading "Add category" when creating
+  and "Save category" when editing. It stays visible in the create flow, where
+  the Finalize field above it is hidden. Everything else in the sheet still
+  applies live; the button's only work is committing the name and closing —
+  the sheet had no explicit commit-and-close action to aim at, which read as
+  unfinished next to the task sheet.
+
+  `commitCategoryEditName()` now returns a boolean so the button knows whether
+  to close: it stays open on a failed create/rename (which toasts its own
+  error) and toasts "Enter a name" for the one silent case, an empty name in
+  the create flow. The button's own mousedown blurs the name field first, so
+  the create/rename has usually already run by the time its click handler
+  fires — calling it again is a no-op, since the committed name then matches
+  the field. It's still called explicitly there so a save that never involved
+  a blur commits too. This is safe against the Type-chip race documented above
+  only because the create path still doesn't re-render the sheet.
+
+  **Enter in the name field takes that same commit-and-close path** (shared as
+  `saveCategorySheet()`), so iOS's blue Done key closes the sheet exactly like
+  the task sheet's Task field. It previously only blurred, which committed the
+  name but left the sheet open. `closeCategoryEditSheet()` therefore blurs the
+  name field first, for the reason `closeSheet()` does: a keyboard-driven save
+  closes the sheet programmatically without focus ever moving, and iOS leaves
+  its keyboard up. Blurring *first* matters — the blur handler's own commit
+  then still sees the committed `catEditCat`, so it's a no-op rather than a
+  rename against `null` (and on the Archive/Delete paths, where the field can
+  be focused when the sheet closes, it's likewise inert).
+
 - `.sheet-actions` stays **in flow — deliberately not sticky**. The task sheet
   at its longest (Task, Comment, Tag, When, Repeat, Until) is ~773px of
   content against the sheet's 88%-of-viewport cap (~714px on an 812pt

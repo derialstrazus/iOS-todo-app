@@ -551,16 +551,19 @@ further down). When in doubt, the code wins:
 
 ## Future screens (long-term plan)
 
-Three additional screens will eventually live at the same layer as the mode
-switching: an **Archive viewer**, an **Exercise mode** (GitHub-contributions
-calendar + performance metrics, then a menu of exercise plans — running,
-yoga, weightlifting — each with long-term goals and a current workout plan,
-e.g. a lifting cycle of Arms/Back/Chest/Legs with per-group progression),
-and a **Financials tracker** (morning review of weekly spend vs. budget,
-fed by a side project that auto-categorizes transactions, with manual
-categorization for the rest). Exercise and Financials details are still to
-be talked through; this section records the architectural decisions made so
-the app can grow into them without rework.
+Two additional screens will eventually live at the same layer as the mode
+switching: an **Archive viewer**, and a **Financials tracker** (morning
+review of weekly spend vs. budget, fed by a side project that
+auto-categorizes transactions, with manual categorization for the rest).
+Financials details are still to be talked through; this section records the
+architectural decisions made so the app can grow into them without rework.
+
+An **Exercise mode** was planned here too — a contributions-style calendar,
+performance metrics, and per-discipline workout plans. It came out on
+2026-08-23: it's being built as **its own separate app**, not a screen in
+this one. Nothing about the decisions below depended on it (the nav registry
+and the multi-domain backup envelope are both additive by design), so they
+stand as written.
 
 ### Navigation: "mode" is promoted to "screen"
 
@@ -568,7 +571,7 @@ Home/Work today is a two-value *filter* over one screen. The new screens are
 not filters — they're different renderers over different data. The agreed
 shape is two-level:
 
-- **`screen`** ∈ `todos` | `archive` | `exercise` | `finance` — which
+- **`screen`** ∈ `todos` | `archive` | `finance` — which
   renderer owns the scroll area.
 - **`viewMode`** ∈ `home` | `work` — stays exactly as it is, but scoped as a
   sub-state of the todos screen (and plausibly reusable as a filter inside
@@ -579,9 +582,9 @@ shape is two-level:
 (`{ id, icon, render, palette }`); the top bar renders its buttons from
 that registry. Adding a screen later is then additive. The refactor can be
 done with only the todos screen registered — that's the point. Top bar goes
-from 3 buttons to ~6 (Work, Home, Archive, Exercise, Finance, menu) —
-icon-only at iPhone width is tight; check on the real device before
-committing all five to the bar.
+from 3 buttons to 5 (Work, Home, Archive, Finance, menu) — icon-only at
+iPhone width is tight; check on the real device before committing them all
+to the bar.
 
 Theming already cooperates: each screen can stamp its own `data-mode` and
 get its own token palette. The fixed Home/Work category-tick colours stay
@@ -590,25 +593,22 @@ fixed by design.
 ### Storage and backup
 
 - One localStorage key per domain, as today: `todos.v2`, `todos.v2.archive`,
-  later `exercise.v1`, `finance.v1`. Rationale unchanged from the archive
-  split: checking a todo checkbox must never re-serialize workout history.
-  iOS Safari's ~5MB quota is the ceiling; finance stores a bounded snapshot
+  later `finance.v1`. Rationale unchanged from the archive split: checking a
+  todo checkbox must never re-serialize a larger domain's history. iOS
+  Safari's ~5MB quota is the ceiling; finance stores a bounded snapshot
   (current week + a few weeks), not an ever-growing ledger.
 - **Backup envelope goes multi-domain** (do this *before* any new domain
-  ships): optional top-level sections — `state`/`archive` today,
-  `exercise`, `finance` later. Old backups stay valid. Restore becomes
-  **section-scoped**: only domains present in the file are replaced.
-  Otherwise, restoring a pre-exercise backup would silently wipe workout
-  history — a data-loss bug designed out before it can exist.
+  ships): optional top-level sections — `state`/`archive` today, `finance`
+  later. Old backups stay valid. Restore becomes **section-scoped**: only
+  domains present in the file are replaced. Otherwise, restoring a
+  pre-finance backup would silently wipe that domain's data — a data-loss
+  bug designed out before it can exist.
 
 ### Per-screen notes
 
 - **Archive viewer:** the where-does-it-live question is answered — its own
   screen. No model change needed. Sanity-check rendering ~5000 entries on
   an iPhone (grouped, collapsed by default, same trick as the main screen).
-- **Exercise:** its own store, *not* derived from the todo archive — plans,
-  goals, cycle position and dated workout records don't belong in archived
-  todos. Todos can link to it later if wanted.
 - **Financials:** external data, but within the no-backend constraint —
   *read-only pull is not sync*. Fetch on launch/screen-open when online,
   cache the latest snapshot in localStorage with an `asOf` timestamp,
@@ -626,7 +626,7 @@ fixed by design.
 
 ### Single-file pressure
 
-Three screens plus recurring tasks could push the file past 5,000 lines.
+Two more screens plus recurring tasks could push the file past 5,000 lines.
 Decision: **stay single-file** with strict internal layout — one
 clearly-fenced section per domain (state + renderer + handlers). Splitting
 would cost offline robustness (no service worker; every extra file is
@@ -640,14 +640,12 @@ Only two things must precede the screens: the multi-domain backup envelope
 in Current state. The screens are now unblocked. Archive viewer
 is the natural first screen — pure UI over existing data, exercising the
 new nav with zero model risk. Decisions still owed before building: whether
-all five nav entries fit the top bar on the real phone, exercise's data
-model, and API-vs-email for the side project.
+all four nav entries fit the top bar on the real phone, and API-vs-email for
+the side project.
 
 ## Backlog (build individually, in priority order)
 
-1. **Exercise tracker** — now planned as a full Exercise screen; see Future
-   screens. Gets its own store rather than deriving from the todo archive.
-2. **Archive viewer** — a way to browse/search archived (completed) tasks
+1. **Archive viewer** — a way to browse/search archived (completed) tasks
    in-app, **grouped by category and sorted by date**. The data is already
    there: every entry `archiveDone()`/`archiveCategory()` writes carries
    `category`, `createdAt`, `completedAt` and `archivedAt`, so no model

@@ -21,7 +21,7 @@ for family responsibilities.
 
 ## Version
 
-**Current: `v35`, bumped 2026-08-22.** Shown in the app's About sheet
+**Current: `v39`, bumped 2026-08-25.** Shown in the app's About sheet
 (hamburger menu → About) alongside the same date, from the `APP_VERSION`/
 `APP_UPDATED` consts near the top of `index.html`'s `<script>`.
 
@@ -549,21 +549,112 @@ further down). When in doubt, the code wins:
   overflows at all, and the common one (Repeat visible, Until hidden, because
   "Once" is selected) comes to 676px and doesn't scroll.
 
+- Archive viewer (backlog #1): the archive stops being write-only. A third
+  nav button opens an **archive screen** — the first screen registered
+  alongside `todos`, so `render()`'s dispatcher and the `NAV` registry are
+  finally carrying more than one entry each (the shared class on all three
+  buttons is now `.nav-btn`, since Archive isn't a mode). Top bar is 4
+  buttons; it fits at 375px, still worth a look on the real phone.
+
+  **Two groupings**, chips at the top of the screen, the choice persisted in
+  `todos.v2.archiveView`:
+  - **By category** — Work categories first in **steel**, then Home in
+    **gold**, using the fixed `--work`/`--home` tokens, so the hue holds
+    whichever palette is active. It paints the group bar's *fill and hairline*
+    as well as its tick, caret and title: the colour IS the grouping here,
+    which is more than a 2px tick can carry — and on this screen's neutral
+    ground (below) those bars are the only colour in the list. The two tinted
+    fills are literal `rgba` rather than tokens; the fixed hues have no
+    wash/edge variants, and inventing four more for two bars isn't worth it.
+    Within a tag, categories are ordered by their **most recent archived task,
+    newest first** (v38) — each group's items are already sorted newest-first,
+    so the head entry is the category's stamp. This deliberately ignores the
+    saved category order, which says nothing about the archive: a project
+    finished last year would otherwise sit above one still being worked, purely
+    because of where it sits on the main screen. It also files the
+    archive-only categories (deleted since, so absent from `state.categories`)
+    by the same rule rather than dumping them alphabetically at the end —
+    `tagOf()`'s "work" fallback is what decides which tag they land under, same
+    as it does for legacy untagged categories on the main screen. A category
+    with no usable stamp anywhere sinks to the end of its tag, name-ordered.
+    The sort runs over the *filtered* entries, so a search re-orders by most
+    recent match.
+  - **By date** — newest day first, `dayKey()` grouping by **local**
+    calendar day (built from the date getters, not by slicing the ISO string,
+    which would file a 01:00 completion under the day before). Entries with
+    no usable stamp at all group under "Undated", last. Date groups have no
+    tag to wear, so their bar keeps the plain grey chrome rather than
+    borrowing a hue.
+
+  Each row's second line names whatever its group doesn't: a category
+  group's rows carry the date, a date group's rows carry the category. Rows
+  take the **Scheduled section's flat wash**, not the task slab — same
+  reasoning, nothing here is actionable. For that same reason they carry **no
+  tag badge** (v39): PRIO/WAIT/QUICK say how to handle a task still ahead of
+  you. The tag is still stored on the entry and still rides in a backup — it
+  just isn't drawn. The screen is **read-only**: no
+  restore-to-list, no delete, no editing. `archiveStamp()` prefers
+  `completedAt`, falling back to `archivedAt` then `createdAt`.
+
+  Deliberately **not filtered by `viewMode`** — the plan floated reusing the
+  mode as a filter here, but showing both tags at once is the whole point of
+  colouring them. Work/Home in the bar take you back to the todos screen.
+
+  **Palette: black and white** (v37), a third `data-mode` (`mono`) alongside gold
+  and steel, stamped by the screen's own `palette()`. It first *inherited*
+  whichever palette the todos screen was wearing, so arriving wouldn't read
+  as a mode switch — but the screen spans both tags at once, and an accent
+  tint over it implies a mode it doesn't have. Draining the ground to true
+  black with white as the accent leaves the fixed `--work`/`--home` hues on
+  the group bars as the only colour on screen, which is the grouping itself.
+  Two notes on the token block: `--sky` and `--ray` go **transparent** rather
+  than grey (both washes are accent-derived, and a white one reads as a
+  smudge, not light), and `--alert` is deliberately **not** remapped, so red
+  still reads as danger in the menu reachable from here. `BAR_COLORS.mono`
+  takes the iOS status bar to `#000000` to match.
+
+  **Search** (the other half of the backlog item) covers text, comment and
+  category. Not persisted — a search is a moment, not a setting. It forces
+  matching groups open, which is why the open-state map is **three-valued**:
+  absent means "never touched" (collapsed normally, open while searching),
+  and an explicit `false` is a group shut *during* a search. The toggle
+  writes the opposite of what's on screen, so a tap always does what it
+  looks like it does. Kept in `todos.v2.archiveOpen`.
+
+  **Perf**, since this is the one screen whose list can hit 5000 rows:
+  groups start collapsed and a collapsed group builds nothing (unlike the
+  todos screen, which builds every row and hides the collapsed ones in CSS),
+  and `ARCHIVE_ROW_BUDGET` caps a render at **600 rows across all open
+  groups** — one screen-wide budget rather than a per-group cap, because
+  many open groups (5000 entries is ~200 day-groups) is as real a problem as
+  one enormous group. A truncated group says so in its own footer line.
+  "Show all"/"Collapse all" became screen-aware, and Show all only opens
+  groups **while the budget can still build them**, toasting "Opened 26 of
+  209 groups" rather than marking 180 groups open that would render as empty
+  bars. Measured on desktop with 5000 entries: 45ms to switch view, 78ms for
+  Show all, 57ms to open a 1000-entry category.
+
+  One behaviour change outside the screen: `sweepDoneTasks()` now copies
+  `comment` into the archive entry. Comments shipped after archiving did, so
+  the sweep had been silently dropping them — visible for the first time now
+  that there's a viewer. Entries written before this have no field and the
+  row just omits the line; no migration.
+
 ## Future screens (long-term plan)
 
-Two additional screens will eventually live at the same layer as the mode
-switching: an **Archive viewer**, and a **Financials tracker** (morning
-review of weekly spend vs. budget, fed by a side project that
-auto-categorizes transactions, with manual categorization for the rest).
-Financials details are still to be talked through; this section records the
-architectural decisions made so the app can grow into them without rework.
+One additional screen lives at the same layer as the mode switching: an
+**Archive viewer**, which **shipped in v36** — see its bullet in Current
+state. This section records the architectural decisions that were made so
+the app could grow into it without rework.
 
-An **Exercise mode** was planned here too — a contributions-style calendar,
-performance metrics, and per-discipline workout plans. It came out on
-2026-08-23: it's being built as **its own separate app**, not a screen in
-this one. Nothing about the decisions below depended on it (the nav registry
-and the multi-domain backup envelope are both additive by design), so they
-stand as written.
+Two others were planned here and both came out on 2026-08-23, each being
+built as **its own separate app** rather than a screen in this one: an
+**Exercise mode** (a contributions-style calendar, performance metrics,
+per-discipline workout plans), and a **Financials tracker** (morning review
+of weekly spend vs. budget, fed by a side project that auto-categorizes
+transactions). Nothing about the decisions below depended on either — the
+nav registry and the multi-domain backup envelope are both additive by
+design — so they stand as written.
 
 ### Navigation: "mode" is promoted to "screen"
 
@@ -571,8 +662,7 @@ Home/Work today is a two-value *filter* over one screen. The new screens are
 not filters — they're different renderers over different data. The agreed
 shape is two-level:
 
-- **`screen`** ∈ `todos` | `archive` | `finance` — which
-  renderer owns the scroll area.
+- **`screen`** ∈ `todos` | `archive` — which renderer owns the scroll area.
 - **`viewMode`** ∈ `home` | `work` — stays exactly as it is, but scoped as a
   sub-state of the todos screen (and plausibly reusable as a filter inside
   the Archive viewer, since archived tasks carry categories that carry
@@ -582,9 +672,8 @@ shape is two-level:
 (`{ id, icon, render, palette }`); the top bar renders its buttons from
 that registry. Adding a screen later is then additive. The refactor can be
 done with only the todos screen registered — that's the point. Top bar goes
-from 3 buttons to 5 (Work, Home, Archive, Finance, menu) — icon-only at
-iPhone width is tight; check on the real device before committing them all
-to the bar.
+from 3 buttons to 4 (Work, Home, Archive, menu) — icon-only at iPhone width
+is tight; check on the real device.
 
 Theming already cooperates: each screen can stamp its own `data-mode` and
 get its own token palette. The fixed Home/Work category-tick colours stay
@@ -592,41 +681,29 @@ fixed by design.
 
 ### Storage and backup
 
-- One localStorage key per domain, as today: `todos.v2`, `todos.v2.archive`,
-  later `finance.v1`. Rationale unchanged from the archive split: checking a
+- One localStorage key per domain, as today: `todos.v2`,
+  `todos.v2.archive`. Rationale unchanged from the archive split: checking a
   todo checkbox must never re-serialize a larger domain's history. iOS
-  Safari's ~5MB quota is the ceiling; finance stores a bounded snapshot
-  (current week + a few weeks), not an ever-growing ledger.
+  Safari's ~5MB quota is the ceiling.
 - **Backup envelope goes multi-domain** (do this *before* any new domain
-  ships): optional top-level sections — `state`/`archive` today, `finance`
-  later. Old backups stay valid. Restore becomes **section-scoped**: only
-  domains present in the file are replaced. Otherwise, restoring a
-  pre-finance backup would silently wipe that domain's data — a data-loss
-  bug designed out before it can exist.
+  ships): optional top-level sections — `state`/`archive` today, any later
+  domain's alongside them. Old backups stay valid. Restore becomes
+  **section-scoped**: only domains present in the file are replaced.
+  Otherwise, restoring a backup written before a domain existed would
+  silently wipe that domain's data — a data-loss bug designed out before it
+  can exist.
 
 ### Per-screen notes
 
-- **Archive viewer:** the where-does-it-live question is answered — its own
-  screen. No model change needed. Sanity-check rendering ~5000 entries on
-  an iPhone (grouped, collapsed by default, same trick as the main screen).
-- **Financials:** external data, but within the no-backend constraint —
-  *read-only pull is not sync*. Fetch on launch/screen-open when online,
-  cache the latest snapshot in localStorage with an `asOf` timestamp,
-  render the cached snapshot with a staleness note offline (the
-  morning-train review must work without signal). Requirements on the side
-  project: **HTTPS** endpoint (the PWA is on GitHub Pages over HTTPS, so
-  HTTP is blocked as mixed content), **CORS** headers allowing the Pages
-  origin, and — the one thing expensive to retrofit — **stable, unique
-  transaction IDs**, because manual category corrections live in a local
-  map keyed by transaction ID, overlaid on whatever the API returns, and
-  must survive re-fetches. Email push can't be automated (a PWA can't read
-  mail); paste-a-JSON-blob import is the fallback, not the primary.
-  Corrections flowing *back* to the side project would be two-way sync —
-  deferred; the app's overlay is authoritative for display.
+- **Archive viewer (built, v36):** its own screen, no model change needed.
+  The ~5000-entry render was sanity-checked on desktop and bounded by a
+  600-row budget rather than by trusting the grouping alone; the numbers are
+  in the Current state bullet. Worth re-checking on the real phone.
 
 ### Single-file pressure
 
-Two more screens plus recurring tasks could push the file past 5,000 lines.
+The archive screen plus recurring tasks could push the file past 5,000
+lines.
 Decision: **stay single-file** with strict internal layout — one
 clearly-fenced section per domain (state + renderer + handlers). Splitting
 would cost offline robustness (no service worker; every extra file is
@@ -637,23 +714,15 @@ together with the open `todo.js` extraction question under Testing.
 
 Only two things must precede the screens: the multi-domain backup envelope
 (**done**) and the nav/dispatcher refactor (**done**) — see their bullets
-in Current state. The screens are now unblocked. Archive viewer
-is the natural first screen — pure UI over existing data, exercising the
-new nav with zero model risk. Decisions still owed before building: whether
-all four nav entries fit the top bar on the real phone, and API-vs-email for
-the side project.
+in Current state. Both are done, and the Archive viewer — the natural
+first screen, pure UI over existing data with zero model risk — shipped on
+top of them in v36 without needing either reopened.
 
 ## Backlog (build individually, in priority order)
 
-1. **Archive viewer** — a way to browse/search archived (completed) tasks
-   in-app, **grouped by category and sorted by date**. The data is already
-   there: every entry `archiveDone()`/`archiveCategory()` writes carries
-   `category`, `createdAt`, `completedAt` and `archivedAt`, so no model
-   change is needed, and category renames no longer fracture a category's
-   history (see Current state). Today the archive is write-only, populated
-   by "Archive done" and "Archive category," and only inspectable via JSON
-   export. Where it lives is decided — its own screen at the nav layer (see
-   Future screens); build after the nav/dispatcher refactor.
+Empty. The Archive viewer was the last item and shipped in v36 (see Current
+state). The nearest open threads are the `todo.js` extraction question under
+Testing, and whatever real use turns up next.
 
 ## Testing (planned)
 

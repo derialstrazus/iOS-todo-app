@@ -106,6 +106,50 @@
     --surface: #12171c;
   }
 
+  /* The archive screen's own palette: black and white. The two todos palettes are
+     a warm or cold accent over a tinted ground; this one drains the ground to
+     true black and takes white as the accent, so the only colour left anywhere on
+     the screen is the --work/--home hue the group bars carry. Those two stay fixed
+     here as everywhere else, which is exactly what makes the grouping legible
+     against a neutral field. --alert is deliberately NOT remapped: red still has
+     to read as danger in the menu behind this screen. */
+  :root[data-mode="mono"] {
+    --acc: #ffffff;
+    --acc-hi: #ffffff;
+    --acc-dim: #8d8d8d;
+    --acc-wash: rgba(255,255,255,0.10);
+    --acc-glow: rgba(255,255,255,0.30);
+    --on-acc: #000000;
+
+    /* Flat black, not a three-stop gradient. The sky glow and the god-rays are
+       both accent-derived washes; a white one reads as a smudge rather than
+       light, so they go transparent instead of turning grey. */
+    --bg-a: #000000;
+    --bg-b: #000000;
+    --bg-c: #000000;
+    --sky: transparent;
+    --ray: transparent;
+
+    --pan-a: #171717;
+    --pan-b: #101010;
+
+    --ink: #f2f2f2;
+    --ink-2: #8f8f8f;
+
+    --edge: #3a3a3a;
+    --hatch: rgba(255,255,255,0.045);
+    --row-line: rgba(255,255,255,0.13);
+
+    --tab-a: #2a2a2a;
+    --tab-b: #161616;
+
+    --bar-a: rgba(66,66,66,0.85);
+    --bar-b: rgba(42,42,42,0.92);
+    --bar-line: rgba(255,255,255,0.24);
+
+    --surface: #0f0f0f;
+  }
+
   html, body {
     background: var(--bg-b);
     color: var(--ink);
@@ -177,9 +221,9 @@
   }
   .ctrl svg { width: 18px; height: 18px; display: block; }
   .ctrl:active { filter: brightness(1.35); }
-  /* Active mode fills solid; drop-shadow rather than box-shadow so the glow
+  /* Active nav entry fills solid; drop-shadow rather than box-shadow so the glow
      follows the notched outline instead of being clipped away. */
-  .mode-btn.active {
+  .nav-btn.active {
     color: var(--on-acc);
     background: linear-gradient(180deg, var(--acc-hi), var(--acc));
     filter: drop-shadow(0 0 7px var(--acc-glow));
@@ -698,6 +742,101 @@
     text-overflow: ellipsis;
   }
 
+  /* ---- Archive screen ----
+     The grouping toggle and search box. They live inside the scroll area (the
+     layout has no per-screen chrome slot) but are built once per visit and then
+     left alone — renderArchive() rebuilds only the group list below them, so a
+     keystroke never detaches the focused input, which on iOS drops the keyboard
+     mid-word. */
+  .arch-bar { margin: 2px 0 12px; }
+  .arch-search {
+    width: 100%;
+    margin-top: 9px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, var(--pan-a), var(--pan-b));
+    border: 1px solid var(--row-line);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 15px;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 0;
+  }
+  .arch-search:focus { border-color: var(--acc); }
+  .arch-summary {
+    color: var(--ink-2);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 0 2px 9px;
+  }
+
+  /* Group bars keep the category-bar chrome — a group here is still a thing you
+     open — but the by-category view paints them in the category's own tag hue:
+     Work steel, Home gold, whichever palette is active, since --work and --home
+     are fixed. That colour IS the grouping, so it carries more than a left tick
+     can. The screen's own palette is neutral (see [data-mode="mono"]), which
+     leaves these bars as the only colour in the list — so the hue takes the bar's
+     fill and hairline too, not just its tick, caret and title. Written as literal
+     rgba rather than a token: the fixed hues have no wash/edge variants, and
+     inventing four more tokens for two bars isn't worth it. */
+  .arch-group.tag-work .sec-head {
+    background: linear-gradient(90deg, rgba(169,189,204,0.22), rgba(169,189,204,0.09));
+    border-color: rgba(169,189,204,0.34);
+    border-left-color: var(--work);
+  }
+  .arch-group.tag-work .sec-caret,
+  .arch-group.tag-work .sec-title { color: var(--work); }
+  .arch-group.tag-home .sec-head {
+    background: linear-gradient(90deg, rgba(217,164,65,0.20), rgba(217,164,65,0.08));
+    border-color: rgba(217,164,65,0.32);
+    border-left-color: var(--home);
+  }
+  .arch-group.tag-home .sec-caret,
+  .arch-group.tag-home .sec-title { color: var(--home); }
+  /* A date group has no tag to wear, so it stays neutral rather than borrowing the
+     accent, which would read as "this one is special". */
+  .arch-group.by-date .sec-head { border-left-color: var(--ink-2); }
+  .arch-group.by-date .sec-caret { color: var(--ink-2); }
+  /* Where a category bar carries its "⋮" and "+", a group bar carries its size:
+     the archive is read, not edited, so there's no action to put here. */
+  .sec-count {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--ink-2);
+    padding: 0 9px 0 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Archive rows take the Scheduled section's flat wash rather than the task
+     slab's hatch and gradient, for the same reason: nothing in them is actionable.
+     See li.sched above — same values, deliberately. */
+  li.arch {
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  li.arch .label { cursor: default; }
+  li.arch .label-text { color: var(--ink-2); }
+  li.arch .label-when { color: var(--ink-2); opacity: 0.75; }
+  li.arch .label-comment { opacity: 0.8; }
+  .arch-icon {
+    width: 17px; height: 17px;
+    flex-shrink: 0;
+    color: var(--ink-2);
+    opacity: 0.7;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .arch-icon svg { width: 13px; height: 13px; display: block; }
+  .arch-more {
+    color: var(--ink-2);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 7px 4px 3px;
+  }
+
   .sec-empty {
     color: var(--ink-2);
     font-size: 12px;
@@ -889,8 +1028,8 @@
   // prior commits had already touched index.html (`git log --oneline -- index.html`)
   // as of the commit that introduced this counter, so the number reflects the app's
   // real edit history instead of resetting it to zero.
-  const APP_VERSION = 35;
-  const APP_UPDATED = "2026-08-22";
+  const APP_VERSION = 39;
+  const APP_UPDATED = "2026-08-25";
 
   const KEY = "todos.v2";
 
@@ -1302,20 +1441,29 @@
   }
 
   // ---- Screen layer ----
-  // The app is a set of screens sharing the top bar and the scroll area; todos
-  // is the only one so far (archive / exercise / finance are planned — see
-  // CLAUDE.md "Future screens"). Each entry owns the scroll area's renderer and
-  // its palette (a data-mode value, or null for the :root gold). `viewMode`
-  // (home/work) stays a sub-state of the todos screen — it is not a screen itself.
+  // The app is a set of screens sharing the top bar and the scroll area. Each
+  // entry owns the scroll area's renderer and its palette (a data-mode value, or
+  // null for the :root gold). `viewMode` (home/work) stays a sub-state of the
+  // todos screen — it is not a screen itself.
   const SCREENS = {
     todos: {
       render: renderTodoList,
       palette: function () { return viewMode === "work" ? "work" : null; }
+    },
+    archive: {
+      render: renderArchive,
+      // Its own palette, and the only screen that doesn't wear a mode's: black and
+      // white. It first inherited whichever palette the todos screen was wearing, so
+      // arriving wouldn't read as a mode switch — but the archive spans both tags at
+      // once, and an accent tint over it implies a mode the screen doesn't have.
+      // Draining it leaves the fixed --work/--home hues on the group bars as the only
+      // colour, which is the grouping itself.
+      palette: function () { return "mono"; }
     }
   };
 
   // data-mode value → iOS status-bar colour. Falls back to the :root gold.
-  const BAR_COLORS = { default: "#0d0a06", work: "#090c0f" };
+  const BAR_COLORS = { default: "#0d0a06", work: "#090c0f", mono: "#000000" };
 
   // Which screen owns the scroll area. Persisted like the mode, guarded the
   // same way (see loadViewMode's comment). An unknown saved id — say, from a
@@ -1337,6 +1485,9 @@
     screen = next;
     saveScreen();
     render();
+    // A new screen starts at its own top, not at the previous one's scroll offset —
+    // same reason setViewMode resets it.
+    scroll.scrollTop = 0;
   }
 
   // Top-bar nav registry. Todos contributes two entries — Work and Home are
@@ -1346,16 +1497,24 @@
   // render() only toggles their active state, never rebuilds them.
   const NAV = [
     {
-      id: "work", label: "Work mode", cls: "mode-btn mode-work",
+      id: "work", label: "Work mode", cls: "nav-btn nav-work",
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13"/><path d="M9 7V4h6v3"/><path d="M3 12h18"/></svg>',
       isActive: function () { return screen === "todos" && viewMode === "work"; },
       onTap: function () { setScreen("todos"); setViewMode("work"); }
     },
     {
-      id: "home", label: "Home mode", cls: "mode-btn mode-home",
+      id: "home", label: "Home mode", cls: "nav-btn nav-home",
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7v9h-6v-6h-6v6H3z"/></svg>',
       isActive: function () { return screen === "todos" && viewMode === "home"; },
       onTap: function () { setScreen("todos"); setViewMode("home"); }
+    },
+    {
+      id: "archive", label: "Archive", cls: "nav-btn nav-archive",
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4"/><path d="M5 8v12h14V8"/><path d="M10 12h4"/></svg>',
+      // A screen, not a mode: it carries no viewMode of its own, and Work/Home stay
+      // lit only while the todos screen owns the scroll area.
+      isActive: function () { return screen === "archive"; },
+      onTap: function () { setScreen("archive"); }
     }
   ];
   const navButtons = {}; // id → button element, filled by buildNav
@@ -2009,6 +2168,378 @@
     renderAddCategoryButton();
   }
 
+  // ---- Archive screen ----
+  // Read-only history. Everything archiveDone() / archiveCategory() sweeps out of
+  // `state` lands in the `archive` array (see ARCHIVE_KEY), which until now was
+  // write-only — a JSON export was the only way to read it back.
+  //
+  // Two groupings, switched by the chips at the top of the screen, each sorted
+  // newest-first inside a group:
+  //   by category — what a project got through. Work categories come first in
+  //                 steel, then Home in gold: the same fixed --work/--home hues
+  //                 the two modes wear, so a group's colour says which side of
+  //                 life it came from without spending a row on saying it.
+  //   by date     — what got finished on a given day, which is the view for "what
+  //                 did I actually do this week".
+  //
+  // Deliberately NOT filtered by viewMode. The plan floated reusing the mode as a
+  // filter here, but the by-category view showing both tags at once is the whole
+  // point of colouring them, and history reads as a whole rather than through the
+  // day's Home/Work lens. Work and Home in the top bar therefore take you back to
+  // the todos screen rather than filtering this one.
+  //
+  // Nothing here is editable: no restore-to-list, no delete. The archive is the
+  // record of what happened, and "Archive done" is the only thing that writes it.
+  const ARCHIVE_VIEW_KEY = "todos.v2.archiveView";
+  const ARCHIVE_OPEN_KEY = "todos.v2.archiveOpen";
+  // Rows built per render, across every open group. Groups start collapsed and a
+  // collapsed group builds nothing, which is most of the protection: the todos
+  // screen can afford to build every row and hide the collapsed ones in CSS, but
+  // the archive is allowed to reach ARCHIVE_THRESHOLD (5000) entries. This is the
+  // backstop for the rest — one screen-wide budget rather than a per-group cap,
+  // because the problem case is many open groups (a year of daily archiving is
+  // ~365 date groups) as much as one enormous one. Groups past the budget still
+  // show their bar and count; they just don't build rows until something above
+  // them is collapsed or a search narrows things.
+  const ARCHIVE_ROW_BUDGET = 600;
+
+  // "cat" | "date", guarded like every other loader — see loadViewMode's comment.
+  let archiveView = loadArchiveView();
+  // Group key → open flag. Three states, and the third matters: absent means
+  // "never touched", which reads as collapsed normally but as OPEN while a search
+  // is running (answering a query with a screen of shut bars would be useless).
+  // An explicit false is therefore how a group stays shut during a search.
+  let archiveOpen = loadArchiveOpen();
+  // Not persisted: a search is a moment, not a setting. Coming back to the screen
+  // tomorrow with a stale filter still applied would look like data loss.
+  let archiveQuery = "";
+  // The two grouping chips, kept so a re-render can re-sync their selected state
+  // without rebuilding the bar they live in (see buildArchiveBar).
+  const archViewChips = {};
+
+  function loadArchiveView() {
+    try {
+      const v = localStorage.getItem(ARCHIVE_VIEW_KEY);
+      if (v === "cat" || v === "date") return v;
+    } catch (e) {}
+    return "cat";
+  }
+  function saveArchiveView() {
+    try { localStorage.setItem(ARCHIVE_VIEW_KEY, archiveView); } catch (e) {}
+  }
+  function loadArchiveOpen() {
+    try {
+      const o = JSON.parse(localStorage.getItem(ARCHIVE_OPEN_KEY));
+      if (o && typeof o === "object") return o;
+    } catch (e) {}
+    return {};
+  }
+  function saveArchiveOpen() {
+    try { localStorage.setItem(ARCHIVE_OPEN_KEY, JSON.stringify(archiveOpen)); } catch (e) {}
+  }
+
+  // When a task finished. completedAt is the honest answer; archivedAt covers
+  // entries swept in before completedAt was stamped, and createdAt is the last
+  // resort. Compared as strings elsewhere, which is safe: they're all ISO.
+  function archiveStamp(e) {
+    return e.completedAt || e.archivedAt || e.createdAt || "";
+  }
+
+  // Local calendar day of a stamp, "YYYY-MM-DD" — the by-date grouping key. Built
+  // from the local getters rather than by slicing the ISO string, which would group
+  // by UTC day and file a 01:00 completion under the day before.
+  function dayKey(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+  }
+
+  // "Today" / "Yesterday" / "Fri, 21 Aug 2026". The near days get named for the
+  // same reason formatWhen names them, and the year is spelled out because the
+  // archive is the one place in the app whose list spans years.
+  function dayLabel(key) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key || "");
+    if (!parts) return "Undated";
+    const d = new Date(+parts[1], +parts[2] - 1, +parts[3]);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const days = Math.round((d - today) / 86400000);
+    if (days === 0) return "Today";
+    if (days === -1) return "Yesterday";
+    return d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  }
+
+  // The second line of a row. Each view names what its own grouping doesn't
+  // already say: rows in a category group carry their date, rows in a date group
+  // carry their category.
+  function archiveLine(e) {
+    const stamp = archiveStamp(e);
+    const time = timeOf(stamp);
+    if (archiveView === "date") {
+      return (time ? time + " · " : "") + (e.category || "No category");
+    }
+    if (!stamp) return "Undated";
+    return dayLabel(dayKey(stamp)) + (time ? ", " + time : "");
+  }
+
+  // Search covers the three things an entry says: its text, its comment, and the
+  // category it came from — the last so "project a" finds a whole project's
+  // history in the date view too.
+  function archiveMatches(e, q) {
+    if (!q) return true;
+    return (e.text || "").toLowerCase().indexOf(q) !== -1
+      || (e.comment || "").toLowerCase().indexOf(q) !== -1
+      || (e.category || "").toLowerCase().indexOf(q) !== -1;
+  }
+
+  // Grouped entries for the active view: [{ key, label, tag, items }] in display
+  // order, items newest-first. `tag` is null for a date group, which has no
+  // category hue to wear. Keys are view-prefixed so the two views keep separate
+  // collapse state — a category and a date can't collide.
+  function archiveGroups() {
+    const q = archiveQuery.trim().toLowerCase();
+    const byDate = archiveView === "date";
+    const map = {};
+    const keys = [];
+    archive.forEach(function (e) {
+      if (!archiveMatches(e, q)) return;
+      const key = byDate ? dayKey(archiveStamp(e)) : (e.category || "");
+      if (!map[key]) { map[key] = []; keys.push(key); }
+      map[key].push(e);
+    });
+    keys.forEach(function (k) {
+      map[k].sort(function (a, b) { return archiveStamp(b).localeCompare(archiveStamp(a)); });
+    });
+
+    if (byDate) {
+      // Newest day first. Entries with no usable stamp at all group under "" and
+      // sort to the end, which is where an undated straggler belongs.
+      keys.sort(function (a, b) { return (b || "").localeCompare(a || ""); });
+      return keys.map(function (k) {
+        return { key: "date:" + k, label: dayLabel(k), tag: null, items: map[k] };
+      });
+    }
+
+    // Work first, then Home — the requirement the two hues exist to serve. Within
+    // a tag, most recently active category first: map[k] is already sorted
+    // newest-first, so its head entry IS that category's latest stamp. This
+    // replaces the saved category order, which said nothing about the archive — a
+    // project finished last year sat above one still being worked purely because of
+    // where it happens to sit on the main screen. It also files the archive-only
+    // categories (deleted since, so absent from state.categories) by the same rule
+    // as the rest, instead of dumping them alphabetically at the end of their tag.
+    // tagOf() resolves a category the tag map has never heard of to "work", the
+    // same fallback that keeps legacy untagged categories reachable on the main
+    // screen — so an orphan lands under Work.
+    //
+    // A category whose entries all lack a usable stamp compares as "" and sinks to
+    // the end of its tag, where name order breaks the tie. Note the ordering is
+    // over the *filtered* entries, so searching re-sorts by most recent match —
+    // which is the same question the unfiltered list is answering.
+    const recent = function (c) { return map[c].length ? archiveStamp(map[c][0]) : ""; };
+    keys.sort(function (a, b) {
+      const ta = tagOf(a) === "work" ? 0 : 1;
+      const tb = tagOf(b) === "work" ? 0 : 1;
+      if (ta !== tb) return ta - tb;
+      const ra = recent(a), rb = recent(b);
+      if (ra !== rb) return rb.localeCompare(ra);
+      return a.localeCompare(b);
+    });
+    return keys.map(function (k) {
+      return { key: "cat:" + k, label: k || "No category", tag: tagOf(k), items: map[k] };
+    });
+  }
+
+  // The grouping toggle and the search box. Built once per visit to the screen and
+  // then left in place: renderArchive() rebuilds only the group list below it, so
+  // typing never detaches the focused input.
+  function buildArchiveBar() {
+    const bar = document.createElement("div");
+    bar.className = "arch-bar";
+
+    const chips = document.createElement("div");
+    chips.className = "chips";
+    [{ id: "cat", label: "By category" }, { id: "date", label: "By date" }].forEach(function (v) {
+      const chip = document.createElement("button");
+      chip.className = "chip";
+      chip.textContent = v.label;
+      chip.onclick = function () {
+        if (archiveView === v.id) return;
+        archiveView = v.id;
+        saveArchiveView();
+        renderArchive();
+        scroll.scrollTop = 0;
+      };
+      archViewChips[v.id] = chip;
+      chips.appendChild(chip);
+    });
+
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "arch-search";
+    search.placeholder = "Search archived tasks";
+    search.value = archiveQuery;
+    search.autocomplete = "off";
+    search.setAttribute("enterkeyhint", "search");
+    search.addEventListener("input", function () {
+      archiveQuery = search.value;
+      renderArchive();
+    });
+
+    bar.append(chips, search);
+    return bar;
+  }
+
+  // One group's rows, up to whatever's left of the render's row budget. Returns
+  // the body and how many rows it built, so the caller can keep the tally.
+  function archiveGroupBody(g, allowance) {
+    const body = document.createElement("div");
+    body.className = "sec-body";
+    const built = Math.min(g.items.length, Math.max(0, allowance));
+    for (let i = 0; i < built; i++) body.appendChild(archiveRow(g.items[i]));
+    if (built < g.items.length) {
+      const more = document.createElement("div");
+      more.className = "arch-more";
+      // Two different situations: this group ran the budget out partway through, or
+      // it never got any of it because the groups above used it up.
+      more.textContent = built
+        ? (g.items.length - built) + " more not shown — search to narrow"
+        : g.items.length + " rows past this screen's limit — collapse a group above";
+      body.appendChild(more);
+    }
+    return { body: body, built: built };
+  }
+
+  // Row: the task slab minus its checkbox and drag handle, like a Scheduled row —
+  // there's nothing left to complete or reorder. A tick where those sat, the task's
+  // text, its comment if it kept one, and whichever of date/category the group
+  // isn't already saying.
+  function archiveRow(e) {
+    const li = document.createElement("li");
+    li.className = "arch";
+
+    const icon = document.createElement("div");
+    icon.className = "arch-icon";
+    icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6"/></svg>';
+    icon.setAttribute("aria-label", "Completed");
+
+    const label = document.createElement("div");
+    label.className = "label";
+
+    const text = document.createElement("div");
+    text.className = "label-text";
+    text.textContent = e.text || "(untitled)";
+    label.appendChild(text);
+
+    // Entries archived before the sweep carried comments through simply have none.
+    if (e.comment) {
+      const comment = document.createElement("div");
+      comment.className = "label-comment";
+      comment.textContent = e.comment;
+      label.appendChild(comment);
+    }
+
+    const when = document.createElement("div");
+    when.className = "label-when";
+    when.textContent = archiveLine(e);
+    label.appendChild(when);
+
+    // No tag badge, deliberately: PRIO/WAIT/QUICK say how to handle a task that is
+    // still ahead of you, and nothing here is. The tag stays on the entry (backups
+    // keep it, and a row is never rewritten) — it just isn't drawn.
+    li.append(icon, label);
+    return li;
+  }
+
+  function renderArchive() {
+    // Reuse the bar when it's already on screen — a re-render from typing, from
+    // switching view, or from opening a group. It only gets rebuilt on arrival from
+    // another screen, whose renderer cleared the scroll area on its way out.
+    let groups = document.getElementById("arch-groups");
+    if (!groups) {
+      scroll.innerHTML = "";
+      scroll.appendChild(buildArchiveBar());
+      groups = document.createElement("div");
+      groups.id = "arch-groups";
+      scroll.appendChild(groups);
+    }
+    Object.keys(archViewChips).forEach(function (id) {
+      archViewChips[id].classList.toggle("selected", archiveView === id);
+    });
+    groups.innerHTML = "";
+
+    if (!archive.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty-all";
+      empty.innerHTML = "Nothing archived yet.<br>Completed tasks land here from the menu's \u201cArchive done\u201d.";
+      groups.appendChild(empty);
+      return;
+    }
+
+    const list = archiveGroups();
+    const searching = !!archiveQuery.trim();
+    if (!list.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty-all";
+      empty.textContent = "No archived task matches that.";
+      groups.appendChild(empty);
+      return;
+    }
+
+    let total = 0;
+    list.forEach(function (g) { total += g.items.length; });
+    const summary = document.createElement("div");
+    summary.className = "arch-summary";
+    summary.textContent = total + (searching ? " match" + (total === 1 ? "" : "es") : " archived task" + (total === 1 ? "" : "s")) +
+      " · " + list.length + (archiveView === "date" ? " day" + (list.length === 1 ? "" : "s") : " categor" + (list.length === 1 ? "y" : "ies"));
+    groups.appendChild(summary);
+
+    let budget = ARCHIVE_ROW_BUDGET;
+    list.forEach(function (g) {
+      // Absent reads as collapsed normally and as open while searching; an explicit
+      // false is a group the user shut. Toggling writes the opposite of whatever is
+      // on screen, so the tap does what it looks like it does in both cases.
+      const saved = archiveOpen[g.key];
+      const open = saved === undefined ? searching : !!saved;
+
+      const section = document.createElement("div");
+      section.className = "section arch-group" + (open ? "" : " collapsed") +
+        (g.tag ? " tag-" + g.tag : " by-date");
+
+      const head = document.createElement("div");
+      head.className = "sec-head";
+
+      const caret = document.createElement("span");
+      caret.className = "sec-caret";
+      caret.innerHTML = '<svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M1 3.5h10L6 9.5z"/></svg>';
+
+      const title = document.createElement("span");
+      title.className = "sec-title";
+      title.textContent = g.label;
+
+      const count = document.createElement("span");
+      count.className = "sec-count";
+      count.textContent = g.items.length;
+
+      head.append(caret, title, count);
+      // Re-renders rather than toggling a class the way the todos screen does: a
+      // collapsed group's rows were never built, so opening one has to build them.
+      head.onclick = function () {
+        archiveOpen[g.key] = !open;
+        saveArchiveOpen();
+        renderArchive();
+      };
+      section.appendChild(head);
+
+      if (open) {
+        const res = archiveGroupBody(g, budget);
+        budget -= res.built;
+        section.appendChild(res.body);
+      }
+      groups.appendChild(section);
+    });
+  }
+
   // ---- Touch + mouse drag reordering, scoped to a single category ----
   let dragIndex = null;
   let dragCat = null;
@@ -2395,13 +2926,50 @@
   }
 
   // ---- Show all / Collapse all ----
+  // Both are screen-aware: on the archive screen they open and close its groups,
+  // since the todos screen's categories aren't on screen to act on.
   function showAll() {
+    if (screen === "archive") {
+      // Opens groups top-down only while the row budget can still build them.
+      // Marking all of them open would be a lie a full archive shows immediately:
+      // 5000 entries is ~200 day-groups, and the ~180 past the budget would each
+      // render as an open bar with nothing under it. Stopping where the budget
+      // does keeps the saved state and the screen agreeing, and the rest open
+      // normally once something above them is collapsed.
+      const groups = archiveGroups();
+      let left = ARCHIVE_ROW_BUDGET;
+      let opened = 0;
+      groups.forEach(function (g) {
+        if (left <= 0) return;
+        archiveOpen[g.key] = true;
+        left -= g.items.length;
+        opened++;
+      });
+      saveArchiveOpen();
+      render();
+      if (opened < groups.length) {
+        showToast("Opened " + opened + " of " + groups.length + " groups — " + ARCHIVE_ROW_BUDGET + "-row limit");
+      }
+      return;
+    }
     state.categories.forEach(function (c) { collapsed[c] = false; });
     collapsed[SCHEDULED_KEY] = false;
     saveCollapsed();
     render();
   }
   function collapseAll() {
+    if (screen === "archive") {
+      // Clearing the map is the cheap way to close everything, since an absent key
+      // reads as collapsed — except while a search is running, where absent reads as
+      // open, so those groups need an explicit false.
+      archiveOpen = {};
+      if (archiveQuery.trim()) {
+        archiveGroups().forEach(function (g) { archiveOpen[g.key] = false; });
+      }
+      saveArchiveOpen();
+      render();
+      return;
+    }
     state.categories.forEach(function (c) { collapsed[c] = true; });
     collapsed[SCHEDULED_KEY] = true;
     saveCollapsed();
@@ -2553,6 +3121,10 @@
         archive.push({
           text: t.text,
           tag: t.tag || null,
+          // Carried through the sweep so the archive screen can show it. Comments
+          // shipped after archiving did, so entries written before this simply have
+          // no field — the viewer skips the line rather than needing a migration.
+          comment: t.comment || null,
           category: cat,
           createdAt: t.createdAt || null,
           completedAt: t.completedAt || now,
